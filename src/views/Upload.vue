@@ -1,525 +1,423 @@
 <template>
-  <div class="upload-container">
-    <a-page-header 
-      title="上传图片"
-      sub-title="将图片上传到您的R2存储桶"
-    />
-    
-    <a-row :gutter="24">
-      <a-col :span="16">
-        <a-card class="upload-card">
-          <div 
-            class="upload-area"
-            :class="{ 'is-dragover': isDragover }"
-            @dragover.prevent="onDragover"
-            @dragleave.prevent="onDragleave"
-            @drop.prevent="onFileDrop"
-            @click="triggerFileSelect"
+  <div class="manage-container">
+    <!-- 侧边树状结构 -->
+    <a-drawer
+      v-model:visible="showBucketTree"
+      title="存储桶文件结构"
+      placement="left"
+      :width="320"
+      :closable="true"
+    > 
+      <div style="height: 100%;display: flex; flex-direction: column;">
+        <div v-if="bucketTree" class="tree-container">
+          <a-tree
+            :treeData="[bucketTree]"
+            :fieldNames="{ title: 'name', key: 'path', children: 'children' }"
+            @select="keys => navigateFromTree(cacheService.getNodeByPath(keys[0]))"
           >
-            <input 
-              type="file" 
-              ref="fileInput" 
-              style="display: none" 
-              @change="onFileChange"
-              multiple
-              accept="image/*"
-            >
-            
-            <div v-if="!uploadFiles.length" class="upload-placeholder">
-              <cloud-upload-outlined class="upload-icon" />
-              <p>拖拽图片到此处或点击上传</p>
-              <p class="upload-tip">支持单个或多个文件上传</p>
+            <template #title="{ name, files, children }">
+              <span>
+                {{ name || '根目录' }}
+                <a-tag v-if="files?.length || children?.length">
+                  {{ getChildCount({ files, children }) }}
+                </a-tag>
+              </span>
+            </template>
+          </a-tree>
             </div>
             
-            <div v-else class="upload-list">
-              <a-list 
-                :data-source="uploadFiles" 
-                :locale="{ emptyText: '没有待上传的文件' }"
-              >
-                <template #renderItem="{ item, index }">
-                  <a-list-item>
-                    <a-list-item-meta>
-                      <template #avatar>
-                        <div class="file-preview">
-                          <img v-if="item.preview" :src="item.preview" :alt="item.file.name" />
-                          <file-image-outlined v-else />
-                        </div>
-                      </template>
-                      <template #title>{{ item.file.name }}</template>
-                      <template #description>
-                        <div>{{ formatFileSize(item.file.size) }}</div>
-                        <a-progress 
-                          v-if="item.status !== 'waiting'" 
-                          :percent="item.progress" 
-                          size="small" 
-                          :status="item.status === 'error' ? 'exception' : undefined"
-                        />
-                      </template>
-                    </a-list-item-meta>
+        <div class="cache-stats">
+          <h4>缓存统计</h4>
+          <p>
+            <strong>总缓存大小：</strong> {{ cacheStats?.totalSize || '0 B' }}<br>
+            <strong>缓存目录数：</strong> {{ cacheStats?.fileCount || 0 }}<br>
+            <strong>缓存图片数：</strong> {{ cacheStats?.urlCount || 0 }}<br>
+            <strong>树结构大小：</strong> {{ cacheStats?.bucketTreeSize || '0 B' }}
+          </p>
+          <a-button type="primary" @click="cacheEntireBucket" :disabled="loading">
+            缓存整个存储桶
+          </a-button>
+        </div>
+      </div>
+    </a-drawer>
+    
+    <a-page-header
+      title="图床管理"
+      sub-title="管理您的R2存储内容"
+      :backIcon="false"
+    >
                     <template #extra>
                       <a-space>
-                        <a-button 
-                          v-if="item.status === 'success'" 
-                          type="link" 
-                          @click="copyUrl(item.url)"
-                        >
-                          复制链接
+          <a-tag v-if="!forceRefresh && !loading" color="success">
+            <clock-circle-outlined /> {{ cacheTimestamp ? new Date(cacheTimestamp).toLocaleString() : '无缓存' }}
+          </a-tag>
+          <a-button @click="toggleViewMode">
+            <unordered-list-outlined v-if="viewMode === 'grid'" />
+            <appstore-outlined v-else />
+            {{ viewMode === 'list' ? '切换到九宫格' : '切换到列表' }}
+          </a-button>
+          <a-button @click="toggleBucketTree">
+            <partition-outlined />浏览树结构
+          </a-button>
+          <a-button type="primary" @click="refreshFiles" :loading="loading">
+            <reload-outlined />刷新
                         </a-button>
-                        <a-button 
-                          v-if="item.status === 'waiting'" 
-                          type="link" 
-                          @click="removeFile(index)"
-                        >
-                          移除
+          <a-dropdown>
+            <a-button>
+              <more-outlined />
                         </a-button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item @click="cacheEntireBucket">
+                  <database-outlined /> 缓存整个存储桶
+                </a-menu-item>
+                <a-menu-item @click="clearAllCache">
+                  <delete-outlined /> 清除缓存
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
                       </a-space>
                     </template>
-                  </a-list-item>
-                </template>
-              </a-list>
-            </div>
-          </div>
-          
-          <a-row style="margin-top: 16px">
-            <a-col :span="24">
-              <a-space style="display: flex; justify-content: center;">
-                <a-button type="primary" @click="uploadAll" :disabled="!canUpload">
-                  上传全部
-                </a-button>
-                <a-button @click="clearFiles">清空列表</a-button>
-              </a-space>
-            </a-col>
-          </a-row>
-          
-        </a-card>
-      </a-col>
+    </a-page-header>
+
+    <a-card>
+      <!-- 面包屑导航 -->
+      <a-breadcrumb style="margin-bottom: 16px">
+        <a-breadcrumb-item>
+          <a @click="navigateTo('')">根目录</a>
+        </a-breadcrumb-item>
+        <a-breadcrumb-item v-for="(part, index) in breadcrumbParts" :key="index">
+          <a @click="navigateTo(part.path)">{{ part.name }}</a>
+        </a-breadcrumb-item>
+      </a-breadcrumb>
       
-      <a-col :span="8">
-        <a-card title="上传选项" class="options-card">
-          <a-form layout="vertical">
-            <a-form-item label="目标目录">
-              <a-tree-select
-                v-model:value="uploadPath"
-                placeholder="选择目标目录"
-                style="width: 100%"
-                :dropdown-style="{ maxHeight: '400px', overflow: 'auto' }"
-                :tree-data="treeData"
-                :load-data="onLoadData"
-                :field-names="{ children: 'children', label: 'name', value: 'path', key: 'path' }"
-                tree-default-expand-all
-                show-search
-                :filter-tree-node="filterTreeNode"
-                allow-clear
-              >
-                <template #suffixIcon><folder-outlined /></template>
-                <template #title="{ value, name }">
-                  <span>{{ name || '根目录' }}</span>
-                </template>
-                <template #notFoundContent>
-                  <div v-if="loadingDirectories">
-                    <a-spin size="small" /> 加载中...
-                  </div>
-                  <div v-else>
-                    <empty-outlined /> 没有找到目录
-                  </div>
-                </template>
-                <template #dropdownRender="{ menuNode: menu }">
-                  <div>
-                    <div style="padding: 6px 12px; display: flex; align-items: center">
-                      <span v-if="uploadPath"><folder-outlined /> 当前路径：{{ uploadPath }}</span>
-                      <span v-else><home-outlined /> 根目录</span>
-                      <a-divider type="vertical" />
-                      <a-button type="link" size="small" @click="showCreateFolderModal = true">
-                        <plus-outlined /> 新建文件夹
-                      </a-button>
-                    </div>
-                    <a-divider style="margin: 4px 0" />
-                    <div>{{ menu }}</div>
-                  </div>
-                </template>
-              </a-tree-select>
-            </a-form-item>
-            
-            <a-form-item label="文件名处理">
-              <a-radio-group v-model="fileNameOption">
-                <a-radio :value="'original'">保留原始文件名</a-radio>
-                <a-radio :value="'timestamp'">添加时间戳前缀</a-radio>
-                <a-radio :value="'uuid'">使用 UUID 替换</a-radio>
-              </a-radio-group>
-            </a-form-item>
-            
-            <a-divider />
-            
+      <!-- 缓存指示器 -->
+      <a-alert 
+        v-if="!forceRefresh && cacheTimestamp && !loading" 
+        type="info" 
+        show-icon 
+        message="使用缓存数据" 
+        description="当前显示的是本地缓存数据，点击刷新按钮获取最新数据。可以使用'缓存整个存储桶'功能预先缓存所有内容。"
+        style="margin-bottom: 16px"
+      />
+      
+      <!-- 警告提示 -->
             <a-alert 
               v-if="!checkS3Config" 
               type="warning" 
               show-icon 
               message="请先完成S3配置" 
-              description="您需要先在S3配置页面中完成R2存储设置后才能上传文件。"
+        description="您需要先在S3配置页面中完成R2存储设置后才能管理文件。"
               style="margin-bottom: 16px"
             />
             
-            <a-typography-title :level="4">上传历史</a-typography-title>
-            
-            <a-list 
-              class="recent-list"
-              :data-source="recentUploads" 
-              :locale="{ emptyText: '暂无上传历史' }"
+      <!-- 加载中 -->
+      <div v-if="loading" class="loading-container">
+        <a-spin tip="正在加载文件列表..." />
+      </div>
+      
+      <!-- 列表视图 -->
+      <a-table
+        v-else-if="viewMode === 'list'"
+        :columns="columns"
+        :data-source="fileList"
+        :pagination="{ pageSize: 10 }"
+        :locale="{ emptyText: '当前目录为空' }"
+        row-key="key"
+      >
+        <!-- 缩略图列 -->
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'thumbnail'">
+            <div class="thumbnail-cell">
+              <template v-if="record.isFolder">
+                <folder-outlined class="folder-icon" />
+              </template>
+              <template v-else-if="isImageFile(record.name) && getFileUrl(record.key)">
+                <div class="image-thumbnail" @click="openPreview(record)">
+                  <img :src="getFileUrl(record.key)" :alt="record.name" />
+                </div>
+              </template>
+              <template v-else>
+                <file-image-outlined v-if="isImageFile(record.name)" class="image-icon" />
+                <file-outlined v-else class="file-icon" />
+              </template>
+            </div>
+          </template>
+          
+          <!-- 文件名列 -->
+          <template v-if="column.dataIndex === 'name'">
+            <a v-if="record.isFolder" @click="openFolder(record.key)">
+              {{ record.name }}
+            </a>
+            <span v-else-if="isImageFile(record.name)" @click="openPreview(record)" class="image-name">
+              {{ record.name }}
+            </span>
+            <span v-else>
+              {{ record.name }}
+            </span>
+          </template>
+          
+          <!-- 大小列 -->
+          <template v-if="column.dataIndex === 'size'">
+            {{ record.isFolder ? '-' : formatFileSize(record.size) }}
+          </template>
+          
+          <!-- 修改时间列 -->
+          <template v-if="column.dataIndex === 'lastModified'">
+            {{ record.lastModified ? formatDate(record.lastModified) : '-' }}
+          </template>
+          
+          <!-- 操作列 -->
+          <template v-if="column.dataIndex === 'action'">
+            <a-space>
+              <a-button 
+                v-if="!record.isFolder" 
+                type="link" 
               size="small"
-            >
-              <template #renderItem="{ item }">
-                <a-list-item>
-                  <a-list-item-meta>
-                    <template #title>{{ item.fileName }}</template>
-                    <template #description>{{ item.time }}</template>
-                  </a-list-item-meta>
-                  <a-button type="link" @click="copyUrl(item.url)">
+                @click="copyUrl(record.key)"
+              >
                     复制链接
                   </a-button>
-                </a-list-item>
+              <a-popconfirm
+                v-if="!record.isFolder"
+                title="确定要删除这个文件吗?"
+                @confirm="deleteFile(record.key)"
+              >
+                <a-button type="link" size="small" danger>删除</a-button>
+              </a-popconfirm>
+            </a-space>
+          </template>
+        </template>
+      </a-table>
+      
+      <!-- 网格视图 -->
+      <div v-else-if="viewMode === 'grid'" class="grid-view">
+        <a-row :gutter="[16, 16]">
+          <!-- 文件夹 -->
+          <a-col 
+            v-for="item in fileList.filter(file => file.isFolder)" 
+            :key="item.key"
+            :xs="12" :sm="8" :md="6" :lg="4" :xl="4"
+          >
+            <a-card 
+              hoverable 
+              class="grid-card folder-card"
+              @click="openFolder(item.key)"
+            >
+              <div class="grid-card-content">
+                <folder-outlined class="grid-folder-icon" />
+                <div class="grid-file-name">{{ item.name }}</div>
+              </div>
+            </a-card>
+          </a-col>
+          
+          <!-- 图片文件 -->
+          <a-col 
+            v-for="item in fileList.filter(file => !file.isFolder && isImageFile(file.name))" 
+            :key="item.key"
+            :xs="12" :sm="8" :md="6" :lg="4" :xl="4"
+          >
+            <a-card 
+              hoverable 
+              class="grid-card image-card"
+              @click="openPreview(item)"
+            >
+              <div class="grid-card-content">
+                <div class="grid-image-container">
+                  <img v-if="getFileUrl(item.key)" :src="getFileUrl(item.key)" :alt="item.name" />
+                  <file-image-outlined v-else class="grid-image-icon" />
+                </div>
+                <div class="grid-file-name">{{ item.name }}</div>
+                <div class="grid-file-info">{{ formatFileSize(item.size) }}</div>
+              </div>
+              <template #actions>
+                <a-button type="link" size="small" @click.stop="copyUrl(item.key)">复制链接</a-button>
+                <a-popconfirm
+                  title="确定要删除这个文件吗?"
+                  @confirm.stop="deleteFile(item.key)"
+                  @click.stop
+                >
+                  <a-button type="link" size="small" danger>删除</a-button>
+                </a-popconfirm>
               </template>
-            </a-list>
-          </a-form>
+            </a-card>
+          </a-col>
+          
+          <!-- 其他文件 -->
+          <a-col 
+            v-for="item in fileList.filter(file => !file.isFolder && !isImageFile(file.name))" 
+            :key="item.key"
+            :xs="12" :sm="8" :md="6" :lg="4" :xl="4"
+          >
+            <a-card 
+              hoverable 
+              class="grid-card file-card"
+            >
+              <div class="grid-card-content">
+                <file-outlined class="grid-file-icon" />
+                <div class="grid-file-name">{{ item.name }}</div>
+                <div class="grid-file-info">{{ formatFileSize(item.size) }}</div>
+              </div>
+              <template #actions>
+                <a-button type="link" size="small" @click.stop="copyUrl(item.key)">复制链接</a-button>
+                <a-popconfirm
+                  title="确定要删除这个文件吗?"
+                  @confirm.stop="deleteFile(item.key)"
+                  @click.stop
+                >
+                  <a-button type="link" size="small" danger>删除</a-button>
+                </a-popconfirm>
+              </template>
         </a-card>
       </a-col>
+          
+          <!-- 如果没有文件显示空状态 -->
+          <a-col :span="24" v-if="fileList.length === 0">
+            <div class="empty-container">
+              <a-empty description="当前目录为空" />
+            </div>
+          </a-col>
     </a-row>
+      </div>
+    </a-card>
     
-    <!-- 新建文件夹对话框 -->
+    <!-- 图片预览模态框 -->
     <a-modal
-      v-model:visible="showCreateFolderModal"
-      title="新建文件夹"
-      @ok="createNewFolder"
-      :confirm-loading="creatingFolder"
+      v-model:visible="previewVisible"
+      title="图片预览"
+      :footer="null"
+      @cancel="closePreview"
+      :destroyOnClose="true"
+      :maskClosable="true"
+      centered
+      width="800px"
     >
-      <a-input
-        v-model:value="newFolderName"
-        placeholder="请输入文件夹名称"
-        @pressEnter="createNewFolder"
+      <img 
+        v-if="previewUrl" 
+        :src="previewUrl" 
+        style="width: 100%;" 
+        :alt="previewImage?.name || '预览图片'" 
       />
-      <p v-if="uploadPath" style="margin-top: 8px">
-        将在 <strong>{{ uploadPath }}</strong> 下创建文件夹
-      </p>
     </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, h, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
-import { message } from 'ant-design-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { message, Modal } from 'ant-design-vue'
 import { 
-  CloudUploadOutlined, 
+  ReloadOutlined, 
+  FolderOutlined, 
+  FileOutlined,
+  PictureOutlined,
   FileImageOutlined,
-  PlusOutlined,
-  FolderOutlined,
-  HomeOutlined,
-  EmptyOutlined
+  ClockCircleOutlined,
+  MoreOutlined,
+  DeleteOutlined,
+  DatabaseOutlined,
+  PartitionOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons-vue'
 import s3Service from '../services/s3Service'
 import cacheService from '../services/cacheService'
 
 const store = useStore()
-const fileInput = ref(null)
-const isDragover = ref(false)
-const uploadFiles = ref([])
-const uploadPath = ref('')
-const fileNameOption = ref('original')
-const recentUploads = ref([])
+const route = useRoute()
+const router = useRouter()
 
-// 目录相关状态
-const availableDirectories = ref([])
-const loadingDirectories = ref(false)
-const showCreateFolderModal = ref(false)
-const newFolderName = ref('')
-const creatingFolder = ref(false)
+// 状态
+const loading = ref(false)
+const fileList = ref([])
+const currentPath = ref('')
+const previewVisible = ref(false)
+const previewUrl = ref('')
+const previewImage = ref(null)
+const fileUrlCache = ref({}) // 缓存文件 URL
+const cacheTimestamp = ref(0) // 缓存时间戳
+const forceRefresh = ref(false) // 强制刷新标志
+const showBucketTree = ref(false) // 是否显示存储桶树结构
+const bucketTree = ref(null) // 存储桶树结构
+const cacheStats = ref(null) // 缓存统计
+const viewMode = ref('grid') // 修改默认为 'grid'，即九宫格模式
 
-// 树形数据
-const treeData = ref([{
-  name: '根目录',
-  path: '',
-  key: 'root',
-  isLeaf: false,
-  children: null
-}])
-
-// 目标目录选择筛选
-const filterTreeNode = (inputValue, node) => {
-  const name = node.name || ''
-  const path = node.path || ''
-  return name.toLowerCase().includes(inputValue.toLowerCase()) ||
-         path.toLowerCase().includes(inputValue.toLowerCase())
+// 判断文件是否为图片
+const isImageFile = (filename) => {
+  if (!filename) return false
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp']
+  const extension = filename.split('.').pop().toLowerCase()
+  return imageExtensions.includes(extension)
 }
 
-// 处理异步加载数据
-const onLoadData = (treeNode) => {
-  return new Promise(async (resolve) => {
-    if (treeNode.dataRef.children && treeNode.dataRef.children.length) {
-      resolve()
-      return
+// 表格列配置
+const columns = [
+  {
+    title: '缩略图',
+    dataIndex: 'thumbnail',
+    key: 'thumbnail',
+    width: 80
+  },
+  {
+    title: '文件名',
+    dataIndex: 'name',
+    key: 'name',
+    sorter: (a, b) => {
+      // 文件夹排在前面
+      if (a.isFolder && !b.isFolder) return -1
+      if (!a.isFolder && b.isFolder) return 1
+      return a.name.localeCompare(b.name)
+    },
+    defaultSortOrder: 'ascend'
+  },
+  {
+    title: '大小',
+    dataIndex: 'size',
+    key: 'size',
+    sorter: (a, b) => a.size - b.size
+  },
+  {
+    title: '修改日期',
+    dataIndex: 'lastModified',
+    key: 'lastModified',
+    sorter: (a, b) => {
+      if (!a.lastModified || !b.lastModified) return 0
+      return new Date(a.lastModified) - new Date(b.lastModified)
     }
-    
-    try {
-      loadingDirectories.value = true
-      const path = treeNode.dataRef.path || ''
-      const childFolders = await fetchDirectories(path)
-      
-      // 如果是根节点
-      if (treeNode.dataRef.key === 'root') {
-        treeData.value[0].children = childFolders
-      } else {
-        // 查找并更新正确的节点
-        updateTreeNodeChildren(treeData.value, treeNode.dataRef.path, childFolders)
-      }
-      
-      loadingDirectories.value = false
-      resolve()
-    } catch (error) {
-      console.error('加载目录失败：', error)
-      loadingDirectories.value = false
-      message.error('加载子目录失败')
-      resolve()
-    }
-  })
-}
-
-// 更新树节点的子节点
-const updateTreeNodeChildren = (nodes, path, children) => {
-  if (!nodes) return false
-  
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]
-    if (node.path === path) {
-      node.children = children
-      return true
-    }
-    
-    if (node.children) {
-      if (updateTreeNodeChildren(node.children, path, children)) {
-        return true
-      }
-    }
+  },
+  {
+    title: '操作',
+    dataIndex: 'action',
+    key: 'action',
+    width: 160
   }
-  
-  return false
-}
-
-// 加载可用目录列表
-const loadDirectories = async () => {
-  if (!checkS3Config.value) {
-    message.warning('请先完成 S3 配置')
-    return
-  }
-  
-  loadingDirectories.value = true
-  
-  try {
-    // 尝试从缓存加载目录树结构
-    const bucketTree = cacheService.getBucketTree()
-    if (bucketTree) {
-      // 从缓存构建树形结构
-      treeData.value = [{
-        name: '根目录',
-        path: '',
-        key: 'root',
-        isLeaf: false,
-        children: convertCacheTreeToTreeData(bucketTree.children || [])
-      }]
-    } else {
-      // 如果没有缓存，则加载根目录
-      const rootFolders = await fetchDirectories('')
-      treeData.value = [{
-        name: '根目录',
-        path: '',
-        key: 'root',
-        isLeaf: false,
-        children: rootFolders
-      }]
-    }
-  } catch (error) {
-    console.error('加载目录列表失败：', error)
-    message.error(`加载目录列表失败：${error.message || '未知错误'}`)
-  } finally {
-    loadingDirectories.value = false
-  }
-}
-
-// 将缓存树结构转换为树形选择器数据
-const convertCacheTreeToTreeData = (nodes) => {
-  if (!nodes || nodes.length === 0) return []
-  
-  return nodes.map(node => ({
-    name: node.name,
-    path: node.path,
-    key: node.path,
-    isLeaf: !(node.children && node.children.length),
-    children: node.children ? convertCacheTreeToTreeData(node.children) : null
-  }))
-}
-
-// 创建文件夹后刷新树形数据
-const refreshTreeDataAfterFolderCreation = (folderPath) => {
-  // 提取父路径
-  const lastSlashIndex = folderPath.lastIndexOf('/')
-  let parentPath = ''
-  
-  if (lastSlashIndex > 0) {
-    parentPath = folderPath.substring(0, lastSlashIndex)
-  }
-  
-  // 查找并刷新父节点的子节点
-  if (parentPath) {
-    updateNodeAndParents(treeData.value, parentPath)
-  } else {
-    // 如果是根目录，直接刷新根节点
-    onLoadData({ dataRef: { key: 'root', path: '' } })
-  }
-}
-
-// 递归更新节点和其父节点
-const updateNodeAndParents = async (nodes, path) => {
-  if (!nodes) return false
-  
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]
-    
-    // 如果找到匹配的节点
-    if (node.path === path) {
-      // 重新加载该节点的子节点
-      const childFolders = await fetchDirectories(path)
-      node.children = childFolders
-      return true
-    }
-    
-    // 递归检查子节点
-    if (node.children) {
-      if (await updateNodeAndParents(node.children, path)) {
-        return true
-      }
-    }
-  }
-  
-  return false
-}
+]
 
 // 检查 S3 配置
 const checkS3Config = computed(() => {
   return !!store.state.s3Config
 })
 
-// 是否可以上传
-const canUpload = computed(() => {
-  return checkS3Config.value && 
-         uploadFiles.value.length > 0 && 
-         uploadFiles.value.some(item => item.status === 'waiting')
+// 生成面包屑数据
+const breadcrumbParts = computed(() => {
+  if (!currentPath.value) return []
+  
+  const parts = currentPath.value.split('/').filter(Boolean)
+  const result = []
+  
+  let path = ''
+  for (const part of parts) {
+    path = path ? `${path}/${part}` : part
+    result.push({
+      name: part,
+      path: path
+    })
+  }
+  
+  return result
 })
-
-// 获取指定路径下的目录
-const fetchDirectories = async (prefix = '') => {
-  try {
-    const objects = await s3Service.listObjects(prefix)
-    
-    // 只保留文件夹
-    const folders = objects.filter(item => item.isFolder).map(folder => ({
-      name: folder.name,
-      path: folder.key,
-      // 标记此文件夹可能有子文件夹
-      isLeaf: false,
-      // 标记尚未加载子文件夹
-      children: null
-    }))
-    
-    // 如果是根路径查询，直接更新可用目录列表
-    if (!prefix) {
-      availableDirectories.value = folders
-    }
-    
-    return folders
-  } catch (error) {
-    console.error('获取目录列表失败：', error)
-    throw error
-  }
-}
-
-// 触发文件选择
-const triggerFileSelect = () => {
-  if (!checkS3Config.value) {
-    message.warning('请先完成 S3 配置')
-    return
-  }
-  fileInput.value.click()
-}
-
-// 拖拽区域事件处理
-const onDragover = () => {
-  isDragover.value = true
-}
-
-const onDragleave = () => {
-  isDragover.value = false
-}
-
-// 文件拖拽放置处理
-const onFileDrop = (e) => {
-  isDragover.value = false
-  
-  if (!checkS3Config.value) {
-    message.warning('请先完成 S3 配置')
-    return
-  }
-  
-  const files = e.dataTransfer.files
-  if (files && files.length > 0) {
-    handleFiles(files)
-  }
-}
-
-// 文件选择处理
-const onFileChange = (e) => {
-  const files = e.target.files
-  if (files && files.length > 0) {
-    handleFiles(files)
-  }
-  // 重置文件选择器
-  e.target.value = ''
-}
-
-// 处理选择的文件
-const handleFiles = (files) => {
-  const fileArray = Array.from(files)
-  
-  // 只处理图片文件
-  const imageFiles = fileArray.filter(file => file.type.startsWith('image/'))
-  
-  if (imageFiles.length === 0) {
-    message.warning('仅支持上传图片文件')
-    return
-  }
-  
-  // 为每个文件创建预览
-  imageFiles.forEach(file => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      uploadFiles.value.push({
-        file,
-        preview: e.target.result,
-        status: 'waiting',
-        progress: 0,
-        url: null
-      })
-    }
-    reader.readAsDataURL(file)
-  })
-}
-
-// 移除文件
-const removeFile = (index) => {
-  uploadFiles.value.splice(index, 1)
-}
-
-// 清空文件列表
-const clearFiles = () => {
-  uploadFiles.value = []
-}
 
 // 格式化文件大小
 const formatFileSize = (size) => {
@@ -534,272 +432,593 @@ const formatFileSize = (size) => {
   }
 }
 
-// 生成文件名
-const generateFileName = (file) => {
-  const extension = file.name.split('.').pop()
-  let fileName = ''
-  
-  switch (fileNameOption.value) {
-    case 'original':
-      fileName = file.name
-      break
-    case 'timestamp':
-      fileName = `${Date.now()}_${file.name}`
-      break
-    case 'uuid':
-      fileName = `${self.crypto.randomUUID()}.${extension}`
-      break
-    default:
-      fileName = file.name
-  }
-  
-  // 添加路径前缀
-  let path = uploadPath.value
-  if (path) {
-    path = path.endsWith('/') ? path : path + '/'
-    fileName = path + fileName
-  }
-  
-  return fileName
+// 格式化日期
+const formatDate = (date) => {
+  if (!date) return '-'
+  return new Date(date).toLocaleString()
 }
 
-// 上传单个文件
-const uploadFile = async (fileItem, index) => {
-  if (fileItem.status !== 'waiting') {
-    return
-  }
-  
-  fileItem.status = 'uploading'
-  fileItem.progress = 0
-  
-  try {
-    const fileName = generateFileName(fileItem.file)
-    
-    // 启动进度更新定时器
-    const progressInterval = setInterval(() => {
-      if (fileItem.progress < 90) {
-        fileItem.progress += Math.floor(Math.random() * 10) + 1
-        if (fileItem.progress > 90) {
-          fileItem.progress = 90
-        }
-      }
-    }, 200)
-    
-    // 实际上传文件
-    const result = await s3Service.uploadFile(fileItem.file, fileName)
-    
-    // 停止进度更新
-    clearInterval(progressInterval)
-    
-    // 更新状态和 URL
-    fileItem.progress = 100
-    fileItem.status = 'success'
-    
-    // 如果返回了 URL 直接使用，否则尝试获取签名 URL
-    if (result.url) {
-      fileItem.url = result.url
-    } else if (result.key) {
-      try {
-        fileItem.url = await s3Service.getSignedUrl(result.key)
-      } catch (urlError) {
-        console.error('获取签名 URL 失败：', urlError)
-        fileItem.url = `${s3Service.config.endpoint}/${s3Service.config.bucket}/${result.key}`
-      }
-    }
-    
-    // 添加到上传历史
-    addToRecentUploads({
-      fileName: fileItem.file.name,
-      url: fileItem.url,
-      time: new Date().toLocaleString()
-    })
-    
-    message.success(`文件 ${fileItem.file.name} 上传成功`)
-  } catch (error) {
-    console.error('上传文件失败：', error)
-    fileItem.status = 'error'
-    fileItem.progress = 0
-    message.error(`上传失败：${error.message || '未知错误'}`)
-  }
+// 导航到指定路径
+const navigateTo = (path) => {
+  currentPath.value = path
+  loadFiles()
 }
 
-// 上传所有文件
-const uploadAll = async () => {
+// 打开文件夹
+const openFolder = (path) => {
+  if (path.endsWith('/')) {
+    currentPath.value = path
+  } else {
+    currentPath.value = path + '/'
+  }
+  loadFiles()
+}
+
+// 加载文件列表
+const loadFiles = async () => {
   if (!checkS3Config.value) {
     message.warning('请先完成 S3 配置')
     return
   }
   
-  const waitingFiles = uploadFiles.value.filter(item => item.status === 'waiting')
+  // 获取缓存时间戳
+  cacheTimestamp.value = parseInt(localStorage.getItem(cacheService.getTimestampKey()) || '0', 10)
   
-  if (waitingFiles.length === 0) {
-    message.info('没有待上传的文件')
-    return
+  // 检查缓存
+  if (!forceRefresh.value) {
+    // 尝试从缓存获取文件列表
+    const cachedFiles = cacheService.loadFileList(currentPath.value)
+    if (cachedFiles && !cacheService.isCacheExpired()) {
+      fileList.value = cachedFiles
+      
+      // 加载 URL 缓存
+      fileUrlCache.value = cacheService.loadFileUrls()
+      
+      // 加载树结构
+      bucketTree.value = cacheService.getBucketTree()
+      
+      // 获取缓存统计
+      updateCacheStats()
+      return
+    }
   }
   
-  // 并行上传所有文件
-  const promises = waitingFiles.map((item, index) => 
-    uploadFile(item, uploadFiles.value.indexOf(item))
-  )
+  loading.value = true
   
   try {
-    await Promise.all(promises)
-    message.success('所有文件上传完成')
+    // 设置防止重复加载的标志
+    const currentLoadPath = currentPath.value
+    
+    // 获取文件列表
+    const files = await s3Service.listObjects(currentPath.value)
+    
+    // 防止多次快速点击导致的路径不匹配问题
+    if (currentLoadPath !== currentPath.value) return
+    
+    fileList.value = files
+    
+    // 保存到缓存服务
+    cacheService.saveFileList(currentPath.value, files)
+    
+    // 保存到本地状态
+    cacheTimestamp.value = Date.now()
+    
+    // 预加载图片缩略图 URL
+    await loadThumbnails(files)
+    
+    // 更新树结构
+    bucketTree.value = cacheService.getBucketTree()
+    
+    // 获取缓存统计
+    updateCacheStats()
+    
+    // 重置强制刷新标志
+    forceRefresh.value = false
   } catch (error) {
-    console.error('上传过程中出错：', error)
+    console.error('加载文件失败：', error)
+    message.error(`加载失败：${error.message}`)
+    fileList.value = []
+  } finally {
+    loading.value = false
   }
+}
+
+// 更新缓存统计
+const updateCacheStats = () => {
+  cacheStats.value = cacheService.getCacheStats()
+}
+
+// 预加载缩略图 URL
+const loadThumbnails = async (files) => {
+  const imageFiles = files.filter(file => !file.isFolder && isImageFile(file.name))
+  
+  // 从缓存加载 URL
+  fileUrlCache.value = cacheService.loadFileUrls()
+  
+  // 并行获取所有图片的签名 URL
+  await Promise.all(
+    imageFiles.map(async (file) => {
+      try {
+        if (!fileUrlCache.value[file.key]) {
+          const url = await s3Service.getSignedUrl(file.key, 3600 * 24) // 24 小时有效期
+          fileUrlCache.value[file.key] = url
+        }
+      } catch (error) {
+        console.error(`获取文件 ${file.key} 的 URL 失败:`, error)
+      }
+    })
+  )
+}
+
+// 获取文件缩略图 URL
+const getFileUrl = (key) => {
+  return fileUrlCache.value[key] || null
+}
+
+// 刷新文件列表 (强制刷新)
+const refreshFiles = () => {
+  forceRefresh.value = true
+  loadFiles()
+}
+
+// 打开预览
+const openPreview = (file) => {
+  previewImage.value = file
+  previewUrl.value = getFileUrl(file.key)
+  if (previewUrl.value) {
+    previewVisible.value = true
+  } else {
+    message.warning('无法加载预览图')
+  }
+}
+
+// 关闭预览
+const closePreview = () => {
+  previewVisible.value = false
 }
 
 // 复制 URL
-const copyUrl = (url) => {
-  if (!url) return
-  
-  navigator.clipboard.writeText(url)
-    .then(() => {
-      message.success('链接已复制到剪贴板')
-    })
-    .catch(err => {
-      console.error('无法复制到剪贴板：', err)
-      message.error('复制失败，请手动复制')
-    })
-}
-
-// 添加到最近上传
-const addToRecentUploads = (upload) => {
-  // 只保留最近 10 条记录
-  recentUploads.value.unshift(upload)
-  if (recentUploads.value.length > 10) {
-    recentUploads.value.pop()
-  }
-  
-  // 保存到本地存储
-  localStorage.setItem('recentUploads', JSON.stringify(recentUploads.value))
-}
-
-// 修改树结构渲染函数，支持树形展示
-const renderTreeNodes = (data) => {
-  if (!data || data.length === 0) return null
-  
-  return data.map(item => {
-    if (item.children !== null) {
-      // 有子节点，渲染树节点
-      return h(
-        'a-tree-node',
-        {
-          key: item.path,
-          title: item.name,
-          isLeaf: false,
-          dataRef: item
-        },
-        { 
-          default: () => renderTreeNodes(item.children)
-        }
-      )
+const copyUrl = async (key) => {
+  try {
+    let url = fileUrlCache.value[key]
+    
+    // 如果缓存中没有，重新获取
+    if (!url) {
+      url = await s3Service.getSignedUrl(key)
+      fileUrlCache.value[key] = url
+      
+      // 更新 URL 缓存
+      cacheService.saveFileUrls(fileUrlCache.value)
     }
     
-    // 叶子节点或未加载子节点
-    return h(
-      'a-tree-node',
-      {
-        key: item.path,
-        title: item.name,
-        isLeaf: false,
-        dataRef: item
-      }
-    )
-  })
+    // 获取用户设置中的复制格式
+    const userSettings = store.state.userSettings
+    const copyFormat = userSettings?.copyFormat || 'url'
+    const fileName = key.split('/').pop()
+    
+    let copyText = url
+    
+    // 根据设置的格式转换 URL
+    if (copyFormat === 'markdown') {
+      copyText = `![${fileName}](${url})`
+    } else if (copyFormat === 'html') {
+      copyText = `<img src="${url}" alt="${fileName}" />`
+    }
+    
+    navigator.clipboard.writeText(copyText)
+      .then(() => {
+        message.success('链接已复制到剪贴板')
+      })
+      .catch(() => {
+        message.error('复制失败，请手动复制')
+        // 显示可复制的内容
+        Modal.info({
+          title: '请手动复制',
+          content: h('div', [
+            h('p', '请手动复制以下内容：'),
+            h('pre', {
+              style: 'background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto;'
+            }, copyText)
+          ])
+        })
+      })
+  } catch (error) {
+    console.error('获取文件 URL 失败：', error)
+    message.error(`获取链接失败：${error.message}`)
+  }
 }
 
-// 组件挂载时加载最近上传记录
-onMounted(() => {
-  const stored = localStorage.getItem('recentUploads')
-  if (stored) {
-    try {
-      recentUploads.value = JSON.parse(stored)
-    } catch (e) {
-      console.error('无法解析上传历史：', e)
+// 删除文件
+const deleteFile = async (key) => {
+  loading.value = true
+  
+  try {
+    await s3Service.deleteObject(key)
+    message.success('文件已删除')
+    
+    // 从缓存中移除
+    if (fileUrlCache.value[key]) {
+      delete fileUrlCache.value[key]
+      cacheService.saveFileUrls(fileUrlCache.value)
     }
+    
+    // 从当前列表中移除
+    fileList.value = fileList.value.filter(file => file.key !== key)
+    
+    // 更新文件列表缓存
+    cacheService.saveFileList(currentPath.value, fileList.value)
+    
+    // 更新树结构
+    bucketTree.value = cacheService.getBucketTree()
+    
+    // 更新缓存统计
+    updateCacheStats()
+  } catch (error) {
+    console.error('删除文件失败：', error)
+    message.error(`删除失败：${error.message}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 清除所有缓存
+const clearAllCache = () => {
+  cacheService.clearAllCache()
+  fileUrlCache.value = {}
+  bucketTree.value = cacheService.getBucketTree()
+  cacheTimestamp.value = 0
+  message.success('缓存已清除')
+  updateCacheStats()
+}
+
+// 缓存整个存储桶
+const cacheEntireBucket = async () => {
+  if (!checkS3Config.value) {
+    message.warning('请先完成 S3 配置')
+    return
   }
   
-  // 初始加载目录列表
-  if (checkS3Config.value) {
-    loadDirectories()
+  loading.value = true
+  message.info('开始缓存整个存储桶，这可能需要一些时间...')
+  
+  try {
+    // 从根目录开始递归缓存
+    await cacheFolderRecursively('')
+    
+    // 更新状态
+    bucketTree.value = cacheService.getBucketTree()
+    cacheTimestamp.value = Date.now()
+    updateCacheStats()
+    
+    message.success('存储桶缓存完成！')
+  } catch (error) {
+    console.error('缓存存储桶失败：', error)
+    message.error(`缓存失败：${error.message}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 递归缓存文件夹
+const cacheFolderRecursively = async (path, depth = 0, maxDepth = 10) => {
+  // 防止过深递归
+  if (depth > maxDepth) {
+    console.warn(`达到最大递归深度 ${maxDepth}，路径：${path}`)
+    return
+  }
+  
+  // 获取当前路径的文件列表
+  const files = await s3Service.listObjects(path)
+  
+  // 保存到缓存
+  cacheService.saveFileList(path, files)
+  
+  // 预加载图片 URL
+  const imageFiles = files.filter(file => !file.isFolder && isImageFile(file.name))
+  await Promise.all(
+    imageFiles.map(async (file) => {
+      try {
+        if (!fileUrlCache.value[file.key]) {
+          const url = await s3Service.getSignedUrl(file.key, 3600 * 24)
+          fileUrlCache.value[file.key] = url
+        }
+      } catch (error) {
+        console.error(`获取文件 ${file.key} 的 URL 失败:`, error)
+      }
+    })
+  )
+  
+  // 保存 URL 缓存
+  cacheService.saveFileUrls(fileUrlCache.value)
+  
+  // 递归处理子文件夹
+  const folders = files.filter(file => file.isFolder)
+  for (const folder of folders) {
+    const folderPath = folder.key
+    await cacheFolderRecursively(folderPath, depth + 1, maxDepth)
+  }
+}
+
+// 切换显示树结构
+const toggleBucketTree = () => {
+  showBucketTree.value = !showBucketTree.value
+}
+
+// 从树结构导航
+const navigateFromTree = (node) => {
+  if (node) {
+    navigateTo(node.path)
+    if (showBucketTree.value) {
+      showBucketTree.value = false
+    }
+  }
+}
+
+// 获取树中文件夹的子项数量
+const getChildCount = (node) => {
+  let count = 0
+  if (node.files) count += node.files.length
+  if (node.children) count += node.children.length
+  return count
+}
+
+// 切换视图模式
+const toggleViewMode = () => {
+  viewMode.value = viewMode.value === 'list' ? 'grid' : 'list'
+  // 保存用户偏好到本地存储
+  localStorage.setItem('r2_image_hosting_view_mode', viewMode.value)
+}
+
+// 挂载时加载数据
+onMounted(() => {
+  // 初始化缓存统计
+  cacheStats.value = { totalSize: '0 B', fileCount: 0, urlCount: 0, bucketTreeSize: '0 B' }
+  
+  // 加载树结构
+  bucketTree.value = cacheService.getBucketTree()
+  
+  // 加载 URL 缓存
+  fileUrlCache.value = cacheService.loadFileUrls()
+  
+  // 加载视图模式偏好
+  const savedViewMode = localStorage.getItem('r2_image_hosting_view_mode')
+  if (savedViewMode) {
+    viewMode.value = savedViewMode
+  } else {
+    // 如果没有保存的偏好，设置为默认九宫格模式并保存
+    viewMode.value = 'grid'
+    localStorage.setItem('r2_image_hosting_view_mode', 'grid')
+  }
+  
+  // 从 Vuex 获取当前文件夹
+  if (store.state.currentFolder) {
+    currentPath.value = store.state.currentFolder
+  }
+  
+  // 加载用户设置
+  if (!store.state.userSettings) {
+    // 尝试从 cacheService 加载
+    const cachedSettings = cacheService.loadUserSettings()
+    
+    if (cachedSettings) {
+      // 同步到 Vuex
+      store.commit('setUserSettings', cachedSettings)
+    } else {
+      // 最后尝试从 localStorage 加载（兼容旧版本）
+      const storedSettings = localStorage.getItem('userSettings')
+      
+      if (storedSettings) {
+        try {
+          const settings = JSON.parse(storedSettings)
+          // 同步到 Vuex
+          store.commit('setUserSettings', settings)
+    } catch (e) {
+          console.error('无法解析存储的设置：', e)
+        }
+      }
+    }
+  }
+
+  // 检查是否有缓存的文件列表
+  const cachedFiles = cacheService.loadFileList(currentPath.value)
+  
+  // 检查是否有 S3 配置
+  if (!checkS3Config.value) {
+    // 尝试从缓存加载配置
+    const cachedConfig = s3Service.loadConfigFromStorage() || cacheService.loadUserConfig();
+    if (cachedConfig) {
+      // 更新到 Vuex
+      store.dispatch('saveConfig', cachedConfig).then(() => {
+        // 配置加载成功后再检查文件列表缓存
+        if (cachedFiles && !cacheService.isCacheExpired()) {
+          fileList.value = cachedFiles
+          updateCacheStats()
+        } else {
+          // 无缓存或缓存过期，重新加载
+          loadFiles()
+        }
+      });
+    }
+  } else {
+    // 有配置则检查是否有缓存
+    if (cachedFiles && !cacheService.isCacheExpired()) {
+      fileList.value = cachedFiles
+      updateCacheStats()
+    } else {
+      // 无缓存或缓存过期，重新加载
+      loadFiles()
+    }
   }
 })
+
+// 监听 S3 配置变化，如果配置了就加载文件
+watch(
+  () => store.state.s3Config,
+  (newConfig) => {
+    if (newConfig) {
+      loadFiles()
+    }
+  }
+)
 </script>
 
 <style scoped>
-.upload-container {
+.manage-container {
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.upload-card {
-  min-height: 400px;
-}
-
-.options-card {
-  height: 100%;
-}
-
-.upload-area {
-  border: 2px dashed #d9d9d9;
-  border-radius: 4px;
-  padding: 20px;
-  text-align: center;
-  background-color: #fafafa;
-  cursor: pointer;
-  transition: border-color 0.3s, background-color 0.3s;
-  min-height: 300px;
+.loading-container {
   display: flex;
-  flex-direction: column;
   justify-content: center;
-}
-
-.upload-area.is-dragover {
-  border-color: #1890ff;
-  background-color: #e6f7ff;
-}
-
-.upload-icon {
-  font-size: 48px;
-  color: #1890ff;
-  margin-bottom: 16px;
-}
-
-.upload-placeholder p {
-  margin: 4px 0;
-}
-
-.upload-tip {
-  font-size: 12px;
-  color: #999;
-}
-
-.upload-list {
-  width: 100%;
-  text-align: left;
-}
-
-.file-preview {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  overflow: hidden;
-  background-color: #eee;
-  display: flex;
   align-items: center;
-  justify-content: center;
+  padding: 40px 0;
 }
 
-.file-preview img {
+.thumbnail-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 50px;
+}
+
+.image-thumbnail {
+  width: 50px;
+  height: 50px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+}
+
+.image-thumbnail img {
   max-width: 100%;
   max-height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
-.recent-list {
-  max-height: 200px;
-  overflow-y: auto;
+.folder-icon {
+  font-size: 24px;
+  color: #faad14;
+}
+
+.file-icon {
+  font-size: 24px;
+  color: #1890ff;
+}
+
+.image-icon {
+  font-size: 24px;
+  color: #52c41a;
+}
+
+.image-name {
+  cursor: pointer;
+  color: #1890ff;
+}
+
+.image-name:hover {
+  text-decoration: underline;
+}
+
+.tree-container {
+  overflow: auto;
+  flex: 1;
+}
+
+.cache-stats {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 网格视图样式 */
+.grid-view {
+  padding: 4px 0; /* 减小上下内边距 */
+}
+
+.grid-card {
+  height: 100%;
+  margin-bottom: 6px; /* 减小卡片间距 */
+}
+
+.grid-card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px; /* 减小内边距 */
+  height: 180px; /* 增加高度以显示更大的图片 */
+  overflow: hidden;
+}
+
+.grid-folder-icon {
+  font-size: 56px; /* 增大文件夹图标 */
+  color: #faad14;
+  margin-bottom: 12px;
+}
+
+.grid-file-icon {
+  font-size: 56px; /* 增大文件图标 */
+  color: #1890ff;
+  margin-bottom: 12px;
+}
+
+.grid-image-icon {
+  font-size: 56px; /* 增大图像图标 */
+  color: #52c41a;
+  margin-bottom: 12px;
+}
+
+.grid-image-container {
+  width: 100%;
+  height: 160px; /* 增大图片容器高度 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px; /* 减小底部边距 */
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.grid-image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.grid-file-name {
+  font-size: 14px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  margin-bottom: 4px;
+  height: 28px;
+}
+
+.grid-file-info {
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+}
+
+.folder-card {
+  cursor: pointer;
+}
+
+.image-card {
+  cursor: pointer;
+}
+
+
+.empty-container {
+  padding: 40px 0;
+  text-align: center;
 }
 </style> 

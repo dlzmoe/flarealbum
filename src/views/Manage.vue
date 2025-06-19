@@ -307,7 +307,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useStore } from 'vuex'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { 
   ReloadOutlined, 
   FolderOutlined, 
@@ -591,15 +591,39 @@ const copyUrl = async (key) => {
       cacheService.saveFileUrls(fileUrlCache.value)
     }
     
-    navigator.clipboard.writeText(url)
+    // 获取用户设置中的复制格式
+    const userSettings = store.state.userSettings
+    const copyFormat = userSettings?.copyFormat || 'url'
+    const fileName = key.split('/').pop()
+    
+    let copyText = url
+    
+    // 根据设置的格式转换 URL
+    if (copyFormat === 'markdown') {
+      copyText = `![${fileName}](${url})`
+    } else if (copyFormat === 'html') {
+      copyText = `<img src="${url}" alt="${fileName}" />`
+    }
+    
+    navigator.clipboard.writeText(copyText)
       .then(() => {
         message.success('链接已复制到剪贴板')
       })
       .catch(() => {
         message.error('复制失败，请手动复制')
+        // 显示可复制的内容
+        Modal.info({
+          title: '请手动复制',
+          content: h('div', [
+            h('p', '请手动复制以下内容：'),
+            h('pre', {
+              style: 'background: #f5f5f5; padding: 8px; border-radius: 4px; overflow-x: auto;'
+            }, copyText)
+          ])
+        })
       })
   } catch (error) {
-    console.error('获取链接失败：', error)
+    console.error('获取文件 URL 失败：', error)
     message.error(`获取链接失败：${error.message}`)
   }
 }
@@ -745,7 +769,7 @@ const toggleViewMode = () => {
   localStorage.setItem('r2_image_hosting_view_mode', viewMode.value)
 }
 
-// 组件挂载时从本地存储加载用户偏好的视图模式
+// 挂载时加载数据
 onMounted(() => {
   // 初始化缓存统计
   cacheStats.value = { totalSize: '0 B', fileCount: 0, urlCount: 0, bucketTreeSize: '0 B' }
@@ -766,19 +790,64 @@ onMounted(() => {
     localStorage.setItem('r2_image_hosting_view_mode', 'grid')
   }
   
-  // 尝试从缓存加载文件列表
+  // 从 Vuex 获取当前文件夹
+  if (store.state.currentFolder) {
+    currentPath.value = store.state.currentFolder
+  }
+  
+  // 加载用户设置
+  if (!store.state.userSettings) {
+    // 尝试从 cacheService 加载
+    const cachedSettings = cacheService.loadUserSettings()
+    
+    if (cachedSettings) {
+      // 同步到 Vuex
+      store.commit('setUserSettings', cachedSettings)
+    } else {
+      // 最后尝试从 localStorage 加载（兼容旧版本）
+      const storedSettings = localStorage.getItem('userSettings')
+      
+      if (storedSettings) {
+        try {
+          const settings = JSON.parse(storedSettings)
+          // 同步到 Vuex
+          store.commit('setUserSettings', settings)
+        } catch (e) {
+          console.error('无法解析存储的设置：', e)
+        }
+      }
+    }
+  }
+
+  // 检查是否有缓存的文件列表
   const cachedFiles = cacheService.loadFileList(currentPath.value)
   
-  // 获取缓存时间戳
-  cacheTimestamp.value = parseInt(localStorage.getItem(cacheService.getTimestampKey()) || '0', 10)
-  
-  // 检查是否有缓存且未过期
-  if (cachedFiles && !cacheService.isCacheExpired()) {
-    fileList.value = cachedFiles
-    updateCacheStats()
-  } else if (checkS3Config.value) {
-    // 无缓存或缓存过期，重新加载
-    loadFiles()
+  // 检查是否有 S3 配置
+  if (!checkS3Config.value) {
+    // 尝试从缓存加载配置
+    const cachedConfig = s3Service.loadConfigFromStorage() || cacheService.loadUserConfig();
+    if (cachedConfig) {
+      // 更新到 Vuex
+      store.dispatch('saveConfig', cachedConfig).then(() => {
+        // 配置加载成功后再检查文件列表缓存
+        if (cachedFiles && !cacheService.isCacheExpired()) {
+          fileList.value = cachedFiles
+          updateCacheStats()
+        } else {
+          // 无缓存或缓存过期，重新加载
+          loadFiles()
+        }
+      });
+    }
+  } else {
+    // 有配置则检查是否有缓存
+    if (cachedFiles && !cacheService.isCacheExpired()) {
+      fileList.value = cachedFiles
+      updateCacheStats()
+    } else {
+      // 无缓存或缓存过期，重新加载
+      loadFiles()
+    }
   }
 })
 

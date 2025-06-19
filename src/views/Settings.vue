@@ -8,7 +8,7 @@
     <a-card title="通用设置">
       <a-form layout="vertical">
         <a-form-item label="默认复制格式">
-          <a-radio-group v-model="copyFormat">
+          <a-radio-group v-model:value="copyFormat">
             <a-radio value="url">URL 链接</a-radio>
             <a-radio value="markdown">Markdown 格式</a-radio>
             <a-radio value="html">HTML 格式</a-radio>
@@ -17,22 +17,22 @@
         
         <a-form-item label="默认上传路径">
           <a-input 
-            v-model="defaultUploadPath"
+            v-model:value="defaultUploadPath"
             placeholder="例如: images/"
             addonAfter="/"
           />
         </a-form-item>
         
         <a-form-item label="默认文件名处理">
-          <a-radio-group v-model="defaultFileNameOption">
+          <a-radio-group v-model:value="defaultFileNameOption">
             <a-radio value="original">保留原始文件名</a-radio>
-            <a-radio value="timestamp">添加时间戳前缀</a-radio>
+            <a-radio value="timestamp">使用时间戳替换</a-radio>
             <a-radio value="uuid">使用 UUID 替换</a-radio>
           </a-radio-group>
         </a-form-item>
         
         <a-form-item label="自动复制上传后的链接">
-          <a-switch v-model="autoCopy" />
+          <a-switch v-model:checked="autoCopy" />
         </a-form-item>
         
         <a-form-item>
@@ -84,8 +84,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import { useStore } from 'vuex'
+import s3Service from '../services/s3Service'
+import cacheService from '../services/cacheService'
 
 const router = useRouter()
+const store = useStore()
 
 // 设置项
 const copyFormat = ref('url')
@@ -102,9 +106,10 @@ const saveSettings = () => {
     autoCopy: autoCopy.value
   }
   
-  // 保存到本地存储
-  localStorage.setItem('userSettings', JSON.stringify(settings))
-  message.success('设置已保存')
+  // 使用 Vuex store action 保存设置
+  store.dispatch('saveUserSettings', settings).then(() => {
+    message.success('设置已保存并生效')
+  })
 }
 
 // 显示清除数据确认
@@ -123,9 +128,17 @@ const showClearDataConfirm = () => {
 
 // 清除所有数据
 const clearAllData = () => {
-  localStorage.removeItem('s3Config')
+  // 清除 Vuex 中的状态
+  store.commit('setS3Config', null)
+  store.commit('setUserSettings', null)
+  
+  // 清除 localStorage 中的数据
+  localStorage.removeItem('s3ConfigData')
   localStorage.removeItem('userSettings')
   localStorage.removeItem('recentUploads')
+  
+  // 清除 cacheService 缓存
+  cacheService.clearAllCache()
   
   message.success('所有数据已清除')
   
@@ -139,17 +152,45 @@ const clearAllData = () => {
 
 // 组件挂载时加载设置
 onMounted(() => {
-  const storedSettings = localStorage.getItem('userSettings')
-  
-  if (storedSettings) {
-    try {
-      const settings = JSON.parse(storedSettings)
-      copyFormat.value = settings.copyFormat || 'url'
-      defaultUploadPath.value = settings.defaultUploadPath || ''
-      defaultFileNameOption.value = settings.defaultFileNameOption || 'original'
-      autoCopy.value = settings.autoCopy !== undefined ? settings.autoCopy : true
-    } catch (e) {
-      console.error('无法解析存储的设置：', e)
+  // 从 Vuex 获取设置
+  const storeSettings = store.state.userSettings
+
+  if (storeSettings) {
+    // 如果 store 中有设置，使用 store 中的设置
+    copyFormat.value = storeSettings.copyFormat || 'url'
+    defaultUploadPath.value = storeSettings.defaultUploadPath || ''
+    defaultFileNameOption.value = storeSettings.defaultFileNameOption || 'original'
+    autoCopy.value = storeSettings.autoCopy !== undefined ? storeSettings.autoCopy : true
+  } else {
+    // 尝试从 cacheService 加载
+    const cachedSettings = cacheService.loadUserSettings()
+    
+    if (cachedSettings) {
+      copyFormat.value = cachedSettings.copyFormat || 'url'
+      defaultUploadPath.value = cachedSettings.defaultUploadPath || ''
+      defaultFileNameOption.value = cachedSettings.defaultFileNameOption || 'original'
+      autoCopy.value = cachedSettings.autoCopy !== undefined ? cachedSettings.autoCopy : true
+      
+      // 同步到 Vuex
+      store.commit('setUserSettings', cachedSettings)
+    } else {
+      // 最后尝试从 localStorage 加载（兼容旧版本）
+      const storedSettings = localStorage.getItem('userSettings')
+      
+      if (storedSettings) {
+        try {
+          const settings = JSON.parse(storedSettings)
+          copyFormat.value = settings.copyFormat || 'url'
+          defaultUploadPath.value = settings.defaultUploadPath || ''
+          defaultFileNameOption.value = settings.defaultFileNameOption || 'original'
+          autoCopy.value = settings.autoCopy !== undefined ? settings.autoCopy : true
+          
+          // 同步到 Vuex
+          store.commit('setUserSettings', settings)
+        } catch (e) {
+          console.error('无法解析存储的设置：', e)
+        }
+      }
     }
   }
 })

@@ -97,13 +97,17 @@ class S3Service {
       const response = await this.client.send(command)
       
       // 处理文件夹
-      const folders = (response.CommonPrefixes || []).map(prefix => ({
-        key: prefix.Prefix,
-        name: prefix.Prefix.split('/').filter(Boolean).pop() + '/',
-        isFolder: true,
-        size: 0,
-        lastModified: null
-      }))
+      const folders = (response.CommonPrefixes || []).map(prefix => {
+        // 确保前缀中没有重复的斜杠
+        const normalizedPrefix = prefix.Prefix.replace(/\/+/g, '/');
+        return {
+          key: normalizedPrefix,
+          name: normalizedPrefix.split('/').filter(Boolean).pop() + '/',
+          isFolder: true,
+          size: 0,
+          lastModified: null
+        };
+      })
       
       // 处理文件
       const files = (response.Contents || [])

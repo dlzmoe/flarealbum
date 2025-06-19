@@ -33,6 +33,16 @@ class CacheService {
     return `${this.CACHE_PREFIX}all_files`;
   }
 
+  // 获取用户配置缓存键的方法
+  getUserConfigKey() {
+    return `${this.CACHE_PREFIX}user_config`;
+  }
+  
+  // 获取用户设置缓存键的方法
+  getUserSettingsKey() {
+    return `${this.CACHE_PREFIX}user_settings`;
+  }
+
   // 从 localStorage 加载树结构
   loadBucketTree() {
     try {
@@ -364,6 +374,58 @@ class CacheService {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // 添加保存用户配置的方法
+  saveUserConfig(config) {
+    try {
+      localStorage.setItem(
+        this.getUserConfigKey(),
+        JSON.stringify(config)
+      );
+      return true;
+    } catch (error) {
+      console.error('保存用户配置失败：', error);
+      this.handleStorageError();
+      return false;
+    }
+  }
+
+  // 添加加载用户配置的方法
+  loadUserConfig() {
+    try {
+      const cachedConfig = localStorage.getItem(this.getUserConfigKey());
+      return cachedConfig ? JSON.parse(cachedConfig) : null;
+    } catch (error) {
+      console.error('加载用户配置失败：', error);
+      return null;
+    }
+  }
+
+  // 添加保存用户设置的方法
+  saveUserSettings(settings) {
+    try {
+      localStorage.setItem(
+        this.getUserSettingsKey(),
+        JSON.stringify(settings)
+      );
+      return true;
+    } catch (error) {
+      console.error('保存用户设置失败：', error);
+      this.handleStorageError();
+      return false;
+    }
+  }
+
+  // 添加加载用户设置的方法
+  loadUserSettings() {
+    try {
+      const cachedSettings = localStorage.getItem(this.getUserSettingsKey());
+      return cachedSettings ? JSON.parse(cachedSettings) : null;
+    } catch (error) {
+      console.error('加载用户设置失败：', error);
+      return null;
+    }
   }
 }
 

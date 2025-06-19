@@ -6,6 +6,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/antd.css'
 import s3Service from './services/s3Service'
+import cacheService from './services/cacheService'
 
 // 引入路由配置
 import routes from './router'
@@ -28,7 +29,32 @@ const router = createRouter({
 
 // 从本地存储加载配置
 const loadConfigFromStorage = () => {
-  return s3Service.loadConfigFromStorage()
+  // 优先使用 s3Service 的配置（兼容旧版本）
+  const s3Config = s3Service.loadConfigFromStorage();
+  if (s3Config) {
+    return s3Config;
+  }
+  
+  // 如果 s3Service 没有配置，尝试从 cacheService 加载
+  return cacheService.loadUserConfig();
+}
+
+// 从本地存储加载用户设置
+const loadUserSettingsFromStorage = () => {
+  // 优先从 cacheService 加载
+  const cachedSettings = cacheService.loadUserSettings();
+  if (cachedSettings) {
+    return cachedSettings;
+  }
+  
+  // 如果 cacheService 没有设置，尝试从 localStorage 加载（兼容旧版本）
+  try {
+    const storedSettings = localStorage.getItem('userSettings');
+    return storedSettings ? JSON.parse(storedSettings) : null;
+  } catch (e) {
+    console.error('无法解析存储的用户设置：', e);
+    return null;
+  }
 }
 
 // 创建 Vuex 存储
@@ -36,6 +62,7 @@ const store = createStore({
   state() {
     return {
       s3Config: loadConfigFromStorage(),
+      userSettings: loadUserSettingsFromStorage(),
       imageList: [],
       currentFolder: '',
       loading: false
@@ -48,6 +75,9 @@ const store = createStore({
       if (config && config.endpoint && config.accessKeyId && config.secretAccessKey) {
         s3Service.initialize(config)
       }
+    },
+    setUserSettings(state, settings) {
+      state.userSettings = settings
     },
     setImageList(state, list) {
       state.imageList = list
@@ -67,6 +97,22 @@ const store = createStore({
       
       // 安全地保存到本地存储，包括密钥
       s3Service.saveConfigToStorage(config)
+      
+      // 同时保存到 cacheService，确保双重备份
+      cacheService.saveUserConfig(config)
+      
+      return true
+    },
+    // 保存用户设置
+    saveUserSettings({ commit }, settings) {
+      // 保存到 Vuex
+      commit('setUserSettings', settings)
+      
+      // 保存到 cacheService
+      cacheService.saveUserSettings(settings)
+      
+      // 同时保存到 localStorage 以保持兼容性
+      localStorage.setItem('userSettings', JSON.stringify(settings))
       
       return true
     }

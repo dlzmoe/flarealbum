@@ -153,6 +153,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { message } from 'ant-design-vue'
 import s3Service from '../services/s3Service'
+import cacheService from '../services/cacheService'
 
 const store = useStore()
 const formRef = ref()
@@ -255,18 +256,22 @@ const testConnection = async () => {
   }
 }
 
-// 组件挂载时，从 Vuex 加载配置
+// 组件挂载时加载配置
 onMounted(() => {
-  // 从 Vuex 加载配置
-  const storeConfig = store.state.s3Config
-  
+  // 检查 Vuex 中是否已有配置
+  const storeConfig = store.state.s3Config;
   if (storeConfig) {
-    // 使用 Vuex 中的配置填充表单
-    Object.keys(formState).forEach(key => {
-      if (storeConfig[key] !== undefined) {
-        formState[key] = storeConfig[key]
-      }
-    })
+    // 将 Vuex 中的配置复制到表单
+    Object.assign(formState, storeConfig);
+    return;
+  }
+  
+  // 如果 Vuex 中没有配置，尝试从本地存储加载
+  const cachedConfig = s3Service.loadConfigFromStorage() || cacheService.loadUserConfig();
+  if (cachedConfig) {
+    Object.assign(formState, cachedConfig);
+    // 同时更新到 Vuex
+    store.dispatch('saveConfig', cachedConfig);
   }
 })
 </script>
