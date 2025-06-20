@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://flarealbum.zishu.me" target="_blank">🌐 Live Demo</a> •
   <a href="#特性">特性</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#使用指南">使用指南</a> •
