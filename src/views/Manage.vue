@@ -391,7 +391,8 @@ const columns = [
     sorter: (a, b) => {
       if (!a.lastModified || !b.lastModified) return 0
       return new Date(a.lastModified) - new Date(b.lastModified)
-    }
+    },
+    defaultSortOrder: 'descend'
   },
   {
     title: '操作',
@@ -475,7 +476,23 @@ const loadFiles = async () => {
   // 从缓存中获取文件列表
   const cachedFiles = cacheService.getFilesInPath(currentPath.value)
   if (cachedFiles && cachedFiles.length > 0) {
-    fileList.value = cachedFiles
+    // 对文件列表进行排序：文件夹在前，非文件夹按修改时间降序排列（新的在前）
+    const sortedFiles = [...cachedFiles].sort((a, b) => {
+      // 文件夹排在前面
+      if (a.isFolder && !b.isFolder) return -1
+      if (!a.isFolder && b.isFolder) return 1
+      
+      // 非文件夹按修改时间降序排列（新的在前）
+      if (!a.isFolder && !b.isFolder) {
+        if (!a.lastModified || !b.lastModified) return 0
+        return new Date(b.lastModified) - new Date(a.lastModified)
+      }
+      
+      // 文件夹按名称排序
+      return a.name.localeCompare(b.name)
+    })
+    
+    fileList.value = sortedFiles
     
     // 加载 URL 缓存
     fileUrlCache.value = cacheService.loadFileUrls()
@@ -505,16 +522,32 @@ const loadFiles = async () => {
     // 获取文件列表
     const files = await s3Service.listObjects(currentPath.value)
     
-    fileList.value = files
+    // 对文件列表进行排序：文件夹在前，非文件夹按修改时间降序排列（新的在前）
+    const sortedFiles = [...files].sort((a, b) => {
+      // 文件夹排在前面
+      if (a.isFolder && !b.isFolder) return -1
+      if (!a.isFolder && b.isFolder) return 1
+      
+      // 非文件夹按修改时间降序排列（新的在前）
+      if (!a.isFolder && !b.isFolder) {
+        if (!a.lastModified || !b.lastModified) return 0
+        return new Date(b.lastModified) - new Date(a.lastModified)
+      }
+      
+      // 文件夹按名称排序
+      return a.name.localeCompare(b.name)
+    })
+    
+    fileList.value = sortedFiles
     
     // 保存到缓存服务
-    cacheService.saveFileList(currentPath.value, files)
+    cacheService.saveFileList(currentPath.value, sortedFiles)
     
     // 保存到本地状态
     cacheTimestamp.value = Date.now()
     
     // 预加载图片缩略图 URL
-    await loadThumbnails(files)
+    await loadThumbnails(sortedFiles)
     
     // 更新树结构
     bucketTree.value = cacheService.getBucketTree()
