@@ -47,6 +47,31 @@
           </a-radio-group>
         </a-form-item>
         
+        <a-form-item label="图片自动转换为WebP格式">
+          <a-switch v-model:checked="convertToWebp" />
+          <div class="setting-tip">
+            启用后，上传的图片将自动转换为 WebP 格式，可以大幅减小文件体积并提高加载速度。
+            <a-tag v-if="convertToWebp" color="success">体积减小约 30-70%</a-tag>
+          </div>
+        </a-form-item>
+        
+        <a-form-item label="WebP质量设置" v-if="convertToWebp">
+          <a-slider 
+            v-model:value="webpQuality" 
+            :min="50" 
+            :max="100" 
+            :step="5"
+            :marks="{
+              50: '50%',
+              75: '75%',
+              100: '100%'
+            }"
+          />
+          <div class="setting-tip">
+            调整 WebP 转换的质量，数值越高质量越好，但文件越大。推荐 75%-85% 的设置可以平衡质量和体积。
+          </div>
+        </a-form-item>
+        
         <a-form-item label="自动复制上传后的链接">
           <a-switch v-model:checked="autoCopy" />
         </a-form-item>
@@ -115,6 +140,8 @@ const defaultUploadPath = ref('')
 const defaultFileNameOption = ref('original')
 const autoCopy = ref(true)
 const customDomainPrefix = ref('') // 新增自定义域名前缀
+const convertToWebp = ref(false)
+const webpQuality = ref(75)
 
 // 生成示例 URL
 const getExampleUrl = () => {
@@ -143,7 +170,9 @@ const saveSettings = () => {
     defaultUploadPath: defaultUploadPath.value,
     defaultFileNameOption: defaultFileNameOption.value,
     autoCopy: autoCopy.value,
-    customDomainPrefix: domain // 保存自定义域名前缀
+    customDomainPrefix: domain, // 保存自定义域名前缀
+    convertToWebp: convertToWebp.value,
+    webpQuality: webpQuality.value
   }
   
   // 使用 Vuex store action 保存设置
@@ -202,6 +231,8 @@ onMounted(() => {
     defaultFileNameOption.value = storeSettings.defaultFileNameOption || 'original'
     autoCopy.value = storeSettings.autoCopy !== undefined ? storeSettings.autoCopy : true
     customDomainPrefix.value = storeSettings.customDomainPrefix || '' // 加载自定义域名前缀
+    convertToWebp.value = storeSettings.convertToWebp !== undefined ? storeSettings.convertToWebp : false
+    webpQuality.value = storeSettings.webpQuality || 75
   } else {
     // 尝试从 cacheService 加载
     const cachedSettings = cacheService.loadUserSettings()
@@ -212,6 +243,8 @@ onMounted(() => {
       defaultFileNameOption.value = cachedSettings.defaultFileNameOption || 'original'
       autoCopy.value = cachedSettings.autoCopy !== undefined ? cachedSettings.autoCopy : true
       customDomainPrefix.value = cachedSettings.customDomainPrefix || '' // 加载自定义域名前缀
+      convertToWebp.value = cachedSettings.convertToWebp !== undefined ? cachedSettings.convertToWebp : false
+      webpQuality.value = cachedSettings.webpQuality || 75
       
       // 同步到 Vuex
       store.commit('setUserSettings', cachedSettings)
@@ -227,6 +260,8 @@ onMounted(() => {
           defaultFileNameOption.value = settings.defaultFileNameOption || 'original'
           autoCopy.value = settings.autoCopy !== undefined ? settings.autoCopy : true
           customDomainPrefix.value = settings.customDomainPrefix || '' // 加载自定义域名前缀
+          convertToWebp.value = settings.convertToWebp !== undefined ? settings.convertToWebp : false
+          webpQuality.value = settings.webpQuality || 75
           
           // 同步到 Vuex
           store.commit('setUserSettings', settings)

@@ -37,14 +37,24 @@
 
     <a-card>
       <!-- 警告提示 -->
-            <a-alert 
-              v-if="!checkS3Config" 
-              type="warning" 
-              show-icon 
-              message="请先完成S3配置" 
+      <a-alert 
+        v-if="!checkS3Config" 
+        type="warning" 
+        show-icon 
+        message="请先完成S3配置" 
         description="您需要先在S3配置页面中完成Cloudflare R2存储设置后才能上传文件。"
-              style="margin-bottom: 16px"
-            />
+        style="margin-bottom: 16px"
+      />
+            
+      <!-- WebP 转换提示 -->
+      <a-alert 
+        v-if="isWebpEnabled" 
+        type="info" 
+        show-icon 
+        message="WebP 转换已启用" 
+        :description="`上传的图片将自动转换为 WebP 格式，可以大幅减小文件体积并提高加载速度。质量设置: ${webpQuality}%`"
+        style="margin-bottom: 16px"
+      />
             
       <!-- 上传表单 -->
       <div class="upload-form">
@@ -101,6 +111,7 @@
           <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
           <p class="ant-upload-hint">
             支持单个或批量上传图片，每个文件不超过 5MB
+            <span v-if="isWebpEnabled">（将自动转换为 WebP 格式）</span>
           </p>
         </a-upload-dragger>
 
@@ -158,8 +169,9 @@
                   <div class="result-title">
                     {{ item.filename }}
                     <a-tag v-if="item.success" color="success">上传成功</a-tag>
-                    <a-tag v-else color="error">上传失败</a-tag>
-              </div>
+                    <a-tag v-if="item.success && item.isWebp" color="processing">WebP</a-tag>
+                    <a-tag v-else-if="!item.success" color="error">上传失败</a-tag>
+                  </div>
               </template>
                 <template #description>
                   <div v-if="item.success">
@@ -180,7 +192,7 @@
                   </div>
                   <div v-else class="error-message">
                     错误：{{ item.error }}
-            </div>
+                  </div>
                 </template>
               </a-list-item-meta>
             </a-list-item>
@@ -206,6 +218,7 @@ import {
 } from '@ant-design/icons-vue'
 import s3Service from '../services/s3Service'
 import cacheService from '../services/cacheService'
+import imageCompression from 'browser-image-compression'
 
 const store = useStore()
 const router = useRouter()
@@ -228,6 +241,21 @@ const uploadProgress = ref({
 // 检查 S3 配置
 const checkS3Config = computed(() => {
   return !!store.state.s3Config
+})
+
+// 获取用户设置
+const userSettings = computed(() => {
+  return store.state.userSettings || {}
+})
+
+// 是否启用 WebP 转换
+const isWebpEnabled = computed(() => {
+  return userSettings.value.convertToWebp === true
+})
+
+// WebP 质量设置
+const webpQuality = computed(() => {
+  return userSettings.value.webpQuality || 75
 })
 
 // 显示当前上传路径
@@ -331,15 +359,55 @@ const clearFiles = () => {
   selectedFiles.value = []
 }
 
+// 转换图片为 WebP 格式
+const convertToWebP = async (file) => {
+  if (!isWebpEnabled.value || !file.type.startsWith('image/')) {
+    return file
+  }
+  
+  try {
+    // 跳过已经是 WebP 格式的图片
+    if (file.type === 'image/webp') {
+      return file
+    }
+    
+    // 压缩选项
+    const options = {
+      maxSizeMB: 5,
+      maxWidthOrHeight: 4096,
+      useWebWorker: true,
+      fileType: 'image/webp',
+      quality: webpQuality.value / 100
+    }
+    
+    // 执行压缩
+    const compressedFile = await imageCompression(file, options)
+    
+    // 创建一个新的文件对象以便于维护原始文件名但改变扩展名
+    const originalName = file.name.split('.').slice(0, -1).join('.')
+    const newFileName = `${originalName}.webp`
+    return new File([compressedFile], newFileName, { type: 'image/webp' })
+  } catch (error) {
+    console.error('WebP 转换失败：', error)
+    message.warning(`文件 ${file.name} 无法转换为 WebP 格式，将使用原始格式上传`)
+    return file
+  }
+}
+
 // 生成文件名
 const generateFilename = (file) => {
   if (!file) return ''
   
   const timestamp = Date.now()
-  const extension = file.name.split('.').pop().toLowerCase()
+  const extension = isWebpEnabled.value && file.type !== 'image/webp' ? 'webp' : file.name.split('.').pop().toLowerCase()
   
   switch (filenameOption.value) {
     case 'original':
+      // 如果转换为 WebP 但保留原文件名，需要替换扩展名
+      if (isWebpEnabled.value && file.type !== 'image/webp') {
+        const basename = file.name.split('.').slice(0, -1).join('.')
+        return `${basename}.webp`
+      }
       return file.name
     case 'timestamp':
       return `${timestamp}.${extension}`
@@ -399,14 +467,17 @@ const uploadFiles = async () => {
   await Promise.all(
     selectedFiles.value.map(async (file) => {
       try {
+        // 准备文件，可能需要转换为 WebP
+        const processedFile = await convertToWebP(file.originFileObj)
+        
         // 生成文件名
-        const filename = generateFilename(file)
+        const filename = generateFilename(processedFile)
         
         // 构建完整路径
         const fullPath = buildUploadPath(filename)
         
         // 上传文件
-        const result = await s3Service.uploadFile(file.originFileObj, fullPath)
+        const result = await s3Service.uploadFile(processedFile, fullPath)
         
         // 更新进度
         uploadProgress.value.success++
@@ -416,7 +487,8 @@ const uploadFiles = async () => {
           filename: filename,
           path: fullPath,
           url: result.url,
-          success: true
+          success: true,
+          isWebp: processedFile.type === 'image/webp'
         })
         
         // 更新缓存
@@ -627,5 +699,15 @@ watch(
   color: #666;
   font-size: 12px;
   margin-top: 4px;
+}
+
+.webp-tag {
+  margin-left: 8px;
+  color: #1890ff;
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+  padding: 0 7px;
+  font-size: 12px;
+  border-radius: 2px;
 }
 </style> 
