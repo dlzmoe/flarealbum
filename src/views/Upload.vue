@@ -247,7 +247,7 @@ const getChildCount = (node) => {
 const selectUploadPath = (path) => {
   if (path) {
     // 标准化路径格式，移除结尾的斜杠
-    uploadPath.value = path.replace(/\/+$/, '')
+    uploadPath.value = path.replace(/^\/+|\/+$/g, '')
     showBucketTree.value = false
   }
 }
@@ -365,7 +365,10 @@ const buildUploadPath = (filename) => {
     }
   }
   
-  return path + filename
+  // 确保文件名不包含路径分隔符
+  const cleanFilename = filename.replace(/^\/+/, '')
+  
+  return path + cleanFilename
 }
 
 // 上传文件

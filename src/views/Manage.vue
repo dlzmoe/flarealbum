@@ -419,14 +419,16 @@ const formatDate = (date) => {
 
 // 导航到指定路径
 const navigateTo = (path) => {
+  // 标准化路径，但保留结尾的斜杠表示目录
   currentPath.value = path
   loadFiles()
 }
 
 // 打开文件夹
 const openFolder = (path) => {
+  // 确保路径以斜杠结尾表示目录
   if (path.endsWith('/')) {
-    currentPath.value = path
+    currentPath.value = path.replace(/\/+$/, '/') // 确保只有一个结尾斜杠
   } else {
     currentPath.value = path + '/'
   }

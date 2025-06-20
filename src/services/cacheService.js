@@ -45,6 +45,12 @@ class CacheService {
     return `${this.CACHE_PREFIX}user_settings`;
   }
 
+  // 标准化路径，避免双斜杠问题
+  normalizePath(path) {
+    // 移除开头和结尾的斜杠，然后根据需要添加
+    return path.replace(/^\/+|\/+$/g, '');
+  }
+
   // 从 localStorage 加载树结构
   loadBucketTree() {
     try {
@@ -87,18 +93,21 @@ class CacheService {
   // 保存文件列表缓存
   saveFileList(path, files) {
     try {
+      // 标准化路径
+      const normalizedPath = this.normalizePath(path);
+      
       // 更新时间戳
       const now = Date.now();
       localStorage.setItem(this.getTimestampKey(), now.toString());
       
       // 保存文件列表
       localStorage.setItem(
-        this.getFileListCacheKey(path),
+        this.getFileListCacheKey(normalizedPath),
         JSON.stringify(files)
       );
       
       // 更新树结构
-      this.updateBucketTree(path, files);
+      this.updateBucketTree(normalizedPath, files);
     } catch (error) {
       console.error('保存文件列表缓存失败：', error);
       this.handleStorageError();
@@ -108,7 +117,9 @@ class CacheService {
   // 加载文件列表缓存
   loadFileList(path) {
     try {
-      const cacheKey = this.getFileListCacheKey(path);
+      // 标准化路径
+      const normalizedPath = this.normalizePath(path);
+      const cacheKey = this.getFileListCacheKey(normalizedPath);
       const cachedFiles = localStorage.getItem(cacheKey);
       return cachedFiles ? JSON.parse(cachedFiles) : null;
     } catch (error) {
@@ -158,8 +169,11 @@ class CacheService {
       this.loadBucketTree();
     }
 
+    // 标准化路径
+    const normalizedPath = this.normalizePath(path);
+    
     // 解析路径并查找/创建节点
-    const pathParts = path.split('/').filter(Boolean);
+    const pathParts = normalizedPath.split('/').filter(Boolean);
     let currentNode = this.bucketTree;
     
     // 遍历路径创建节点
@@ -197,8 +211,11 @@ class CacheService {
     
     // 确保文件夹存在于子节点中
     files.filter(file => file.isFolder).forEach(folder => {
-      const folderName = folder.name.replace('/', '');
-      const folderPath = path ? `${path}/${folderName}` : folderName;
+      // 清理文件夹名称，移除斜杠
+      const folderName = folder.name.replace(/\/+/g, '');
+      
+      // 构建文件夹路径，避免双斜杠
+      const folderPath = normalizedPath ? `${normalizedPath}/${folderName}` : folderName;
       
       // 检查子节点中是否已存在此文件夹
       let exists = false;
@@ -239,7 +256,9 @@ class CacheService {
   getNodeByPath(path) {
     if (!path) return this.bucketTree;
     
-    const pathParts = path.split('/').filter(Boolean);
+    // 标准化路径
+    const normalizedPath = this.normalizePath(path);
+    const pathParts = normalizedPath.split('/').filter(Boolean);
     let currentNode = this.bucketTree;
     
     for (const part of pathParts) {
@@ -300,14 +319,17 @@ class CacheService {
 
   // 获取指定路径下的文件（从缓存中）
   getFilesInPath(path) {
+    // 标准化路径
+    const normalizedPath = this.normalizePath(path);
+    
     // 先尝试从专门的路径缓存中获取
-    const cachedFiles = this.loadFileList(path);
-    if (cachedFiles) {
+    const cachedFiles = this.loadFileList(normalizedPath);
+    if (cachedFiles && cachedFiles.length > 0) {
       return cachedFiles;
     }
     
     // 如果没有专门的路径缓存，从树结构中获取
-    const node = this.getNodeByPath(path);
+    const node = this.getNodeByPath(normalizedPath);
     if (node) {
       // 获取当前节点的文件
       const files = [...node.files];

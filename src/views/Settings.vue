@@ -23,6 +23,22 @@
           />
         </a-form-item>
         
+        <a-form-item label="自定义域名前缀">
+          <a-input 
+            v-model:value="customDomainPrefix"
+            placeholder="例如: https://cdn.example.com"
+            addonAfter="/"
+          >
+            <template #prefix>
+              <info-circle-outlined />
+            </template>
+          </a-input>
+          <div class="setting-tip">
+            设置后，生成的图片链接将使用此域名替代默认的R2存储URL。
+            <a-tag v-if="customDomainPrefix" color="success">示例: {{ getExampleUrl() }}</a-tag>
+          </div>
+        </a-form-item>
+        
         <a-form-item label="默认文件名处理">
           <a-radio-group v-model:value="defaultFileNameOption">
             <a-radio value="original">保留原始文件名</a-radio>
@@ -85,6 +101,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { useStore } from 'vuex'
+import { InfoCircleOutlined } from '@ant-design/icons-vue'
 import s3Service from '../services/s3Service'
 import cacheService from '../services/cacheService'
 
@@ -96,14 +113,35 @@ const copyFormat = ref('url')
 const defaultUploadPath = ref('')
 const defaultFileNameOption = ref('original')
 const autoCopy = ref(true)
+const customDomainPrefix = ref('')
+
+// 生成示例URL
+const getExampleUrl = () => {
+  const domain = customDomainPrefix.value.trim().replace(/\/+$/, '')
+  const path = defaultUploadPath.value.trim().replace(/^\/+|\/+$/g, '')
+  const filename = 'example.jpg'
+  
+  if (domain) {
+    if (path) {
+      return `${domain}/${path}/${filename}`
+    } else {
+      return `${domain}/${filename}`
+    }
+  } else {
+    return 'https://your-r2.example.com/example.jpg'
+  }
+}
 
 // 保存设置
 const saveSettings = () => {
+  const domain = customDomainPrefix.value.trim().replace(/\/+$/, '')
+  
   const settings = {
     copyFormat: copyFormat.value,
     defaultUploadPath: defaultUploadPath.value,
     defaultFileNameOption: defaultFileNameOption.value,
-    autoCopy: autoCopy.value
+    autoCopy: autoCopy.value,
+    customDomainPrefix: domain
   }
   
   // 使用 Vuex store action 保存设置
@@ -161,6 +199,7 @@ onMounted(() => {
     defaultUploadPath.value = storeSettings.defaultUploadPath || ''
     defaultFileNameOption.value = storeSettings.defaultFileNameOption || 'original'
     autoCopy.value = storeSettings.autoCopy !== undefined ? storeSettings.autoCopy : true
+    customDomainPrefix.value = storeSettings.customDomainPrefix || ''
   } else {
     // 尝试从 cacheService 加载
     const cachedSettings = cacheService.loadUserSettings()
@@ -170,6 +209,7 @@ onMounted(() => {
       defaultUploadPath.value = cachedSettings.defaultUploadPath || ''
       defaultFileNameOption.value = cachedSettings.defaultFileNameOption || 'original'
       autoCopy.value = cachedSettings.autoCopy !== undefined ? cachedSettings.autoCopy : true
+      customDomainPrefix.value = cachedSettings.customDomainPrefix || ''
       
       // 同步到 Vuex
       store.commit('setUserSettings', cachedSettings)
@@ -184,6 +224,7 @@ onMounted(() => {
           defaultUploadPath.value = settings.defaultUploadPath || ''
           defaultFileNameOption.value = settings.defaultFileNameOption || 'original'
           autoCopy.value = settings.autoCopy !== undefined ? settings.autoCopy : true
+          customDomainPrefix.value = settings.customDomainPrefix || ''
           
           // 同步到 Vuex
           store.commit('setUserSettings', settings)
@@ -200,5 +241,11 @@ onMounted(() => {
 .settings-container {
   max-width: 800px;
   margin: 0 auto;
+}
+
+.setting-tip {
+  color: #666;
+  font-size: 12px;
+  margin-top: 4px;
 }
 </style> 

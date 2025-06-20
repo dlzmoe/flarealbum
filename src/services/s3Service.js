@@ -88,9 +88,12 @@ class S3Service {
     }
 
     try {
+      // 标准化前缀，避免双斜杠问题
+      const normalizedPrefix = prefix.replace(/\/+/g, '/').replace(/^\//, '')
+      
       const command = new ListObjectsV2Command({
         Bucket: this.config.bucket,
-        Prefix: prefix,
+        Prefix: normalizedPrefix,
         Delimiter: '/'
       })
       
@@ -111,7 +114,7 @@ class S3Service {
       
       // 处理文件
       const files = (response.Contents || [])
-        .filter(item => item.Key !== prefix) // 过滤掉当前前缀
+        .filter(item => item.Key !== normalizedPrefix) // 过滤掉当前前缀
         .map(item => ({
           key: item.Key,
           name: item.Key.split('/').pop(),
