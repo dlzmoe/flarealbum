@@ -73,7 +73,7 @@
     
     <a-card title="关于" style="margin-top: 16px">
       <a-typography>
-        <a-typography-title :level="4">R2 图床上传工具</a-typography-title>
+        <a-typography-title :level="4">图床上传工具</a-typography-title>
         <a-typography-paragraph>
           这是一个基于 Vue3 和 Ant Design Vue 构建的图床上传工具，支持上传图片到 Cloudflare R2 存储桶。
         </a-typography-paragraph>

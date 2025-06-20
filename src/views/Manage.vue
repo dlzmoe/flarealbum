@@ -528,19 +528,32 @@ const loadThumbnails = async (files) => {
   // 从缓存加载 URL
   fileUrlCache.value = cacheService.loadFileUrls()
   
-  // 并行获取所有图片的签名 URL
-  await Promise.all(
-    imageFiles.map(async (file) => {
-      try {
-        if (!fileUrlCache.value[file.key]) {
-          const url = await s3Service.getSignedUrl(file.key, 3600 * 24) // 24 小时有效期
-          fileUrlCache.value[file.key] = url
-        }
-      } catch (error) {
-        console.error(`获取文件 ${file.key} 的 URL 失败:`, error)
+  // 检查是否有自定义域名前缀
+  const userSettings = store.state.userSettings
+  const customDomain = userSettings?.customDomainPrefix?.trim().replace(/\/+$/, '')
+  
+  // 如果有自定义域名前缀，直接使用它构建 URL
+  if (customDomain) {
+    imageFiles.forEach(file => {
+      if (!fileUrlCache.value[file.key]) {
+        fileUrlCache.value[file.key] = `${customDomain}/${file.key}`
       }
     })
-  )
+  } else {
+    // 否则使用签名 URL
+    await Promise.all(
+      imageFiles.map(async (file) => {
+        try {
+          if (!fileUrlCache.value[file.key]) {
+            const url = await s3Service.getSignedUrl(file.key, 3600 * 24) // 24 小时有效期
+            fileUrlCache.value[file.key] = url
+          }
+        } catch (error) {
+          console.error(`获取文件 ${file.key} 的 URL 失败:`, error)
+        }
+      })
+    )
+  }
   
   // 保存 URL 缓存
   cacheService.saveFileUrls(fileUrlCache.value)
@@ -548,7 +561,20 @@ const loadThumbnails = async (files) => {
 
 // 获取文件缩略图 URL
 const getFileUrl = (key) => {
-  return fileUrlCache.value[key] || null
+  // 优先使用缓存中的 URL
+  if (fileUrlCache.value[key]) {
+    return fileUrlCache.value[key]
+  }
+  
+  // 如果缓存中没有，尝试使用自定义域名前缀
+  const userSettings = store.state.userSettings
+  if (userSettings?.customDomainPrefix) {
+    const domain = userSettings.customDomainPrefix.trim().replace(/\/+$/, '')
+    return `${domain}/${key}`
+  }
+  
+  // 没有自定义域名也没有缓存，返回 null
+  return null
 }
 
 // 刷新文件列表 (强制刷新)
@@ -572,8 +598,11 @@ const refreshFiles = async () => {
     // 加载当前路径的文件
     fileList.value = cacheService.getFilesInPath(currentPath.value)
     
-    // 加载 URL 缓存
-    fileUrlCache.value = cacheService.loadFileUrls()
+    // 清空 URL 缓存，以便重新生成
+    fileUrlCache.value = {}
+    
+    // 预加载图片缩略图 URL
+    await loadThumbnails(fileList.value)
     
     // 获取缓存统计
     updateCacheStats()
@@ -610,7 +639,19 @@ const copyUrl = async (key) => {
     
     // 如果缓存中没有，重新获取
     if (!url) {
-      url = await s3Service.getSignedUrl(key)
+      // 检查是否有自定义域名前缀
+      const userSettings = store.state.userSettings
+      const customDomain = userSettings?.customDomainPrefix?.trim().replace(/\/+$/, '')
+      
+      if (customDomain) {
+        // 使用自定义域名
+        url = `${customDomain}/${key}`
+      } else {
+        // 否则获取签名 URL
+        url = await s3Service.getSignedUrl(key)
+      }
+      
+      // 保存到缓存
       fileUrlCache.value[key] = url
       
       // 更新 URL 缓存

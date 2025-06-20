@@ -48,7 +48,7 @@ onMounted(() => {
       width="200"
       style="overflow: auto; height: 100vh; position: fixed; left: 0"
     >
-      <div class="logo">R2 图床</div>
+      <div class="logo">FlareAlbum</div>
       <a-menu
         v-model:selectedKeys="selectedKeys"
         mode="inline"
@@ -85,7 +85,7 @@ onMounted(() => {
       </a-layout-content>
       
       <a-layout-footer style="text-align: center">
-        CloudFlare R2 图床 ©2025 By <a href="https://github.com/dlzmoe" target="_blank">dlzmoe</a>
+        FlareAlbum ©2025 By <a href="https://github.com/dlzmoe" target="_blank">dlzmoe</a>
       </a-layout-footer>
     </a-layout>
   </a-layout>

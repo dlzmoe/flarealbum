@@ -105,7 +105,7 @@
       
       <a-typography-title :level="4" id="cors-config">配置 CORS（跨源资源共享）</a-typography-title>
       <a-typography-paragraph>
-        要使用 R2 图床，您需要在 Cloudflare R2 控制台中配置 CORS 设置：
+        要使用 FlareAlbum，您需要在 Cloudflare R2 控制台中配置 CORS 设置：
       </a-typography-paragraph>
       <a-typography-paragraph>
         1. 登录 Cloudflare 仪表板

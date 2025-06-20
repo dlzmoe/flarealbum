@@ -37,15 +37,15 @@
 
     <a-card>
       <!-- 警告提示 -->
-      <a-alert 
-        v-if="!checkS3Config" 
-        type="warning" 
-        show-icon 
-        message="请先完成S3配置" 
+            <a-alert 
+              v-if="!checkS3Config" 
+              type="warning" 
+              show-icon 
+              message="请先完成S3配置" 
         description="您需要先在S3配置页面中完成R2存储设置后才能上传文件。"
-        style="margin-bottom: 16px"
-      />
-
+              style="margin-bottom: 16px"
+            />
+            
       <!-- 上传表单 -->
       <div class="upload-form">
         <!-- 上传路径 -->
@@ -62,7 +62,7 @@
           </a-input-group>
           <div class="path-tip">
             当前路径：<span class="current-path">{{ displayUploadPath }}</span>
-          </div>
+      </div>
         </a-form-item>
 
         <!-- 文件命名选项 -->
@@ -106,8 +106,8 @@
 
         <!-- 上传按钮 -->
         <div class="upload-actions">
-          <a-space>
-            <a-button 
+            <a-space>
+              <a-button 
               type="primary" 
               :disabled="selectedFiles.length === 0 || uploading || !checkS3Config" 
               @click="uploadFiles"
@@ -120,7 +120,7 @@
             </a-button>
           </a-space>
         </div>
-      </div>
+              </div>
 
       <!-- 上传进度 -->
       <div v-if="uploadProgress.total > 0" class="upload-progress">
@@ -130,13 +130,13 @@
             <a-tag color="success">成功：{{ uploadProgress.success }}</a-tag>
             <a-tag color="error" v-if="uploadProgress.fail > 0">失败：{{ uploadProgress.fail }}</a-tag>
           </span>
-        </div>
+                </div>
         <a-progress 
           :percent="Math.round(((uploadProgress.success + uploadProgress.fail) / uploadProgress.total) * 100)" 
           :success="{ percent: Math.round((uploadProgress.success / uploadProgress.total) * 100) }"
           :status="uploadProgress.fail > 0 ? 'exception' : (uploadProgress.total === uploadProgress.success + uploadProgress.fail ? 'success' : 'active')"
         />
-      </div>
+              </div>
 
       <!-- 上传结果列表 -->
       <div v-if="uploadResults.length > 0" class="upload-results">
@@ -153,14 +153,14 @@
                     <check-circle-outlined v-if="item.success" class="success-icon" />
                     <close-circle-outlined v-else class="error-icon" />
                   </div>
-                </template>
+              </template>
                 <template #title>
                   <div class="result-title">
                     {{ item.filename }}
                     <a-tag v-if="item.success" color="success">上传成功</a-tag>
                     <a-tag v-else color="error">上传失败</a-tag>
-                  </div>
-                </template>
+              </div>
+              </template>
                 <template #description>
                   <div v-if="item.success">
                     <div class="result-url">{{ item.url }}</div>
@@ -180,7 +180,7 @@
                   </div>
                   <div v-else class="error-message">
                     错误：{{ item.error }}
-                  </div>
+            </div>
                 </template>
               </a-list-item-meta>
             </a-list-item>
@@ -199,7 +199,7 @@ import { message } from 'ant-design-vue'
 import { 
   InboxOutlined,
   UploadOutlined,
-  FolderOutlined,
+  FolderOutlined, 
   PartitionOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined
@@ -258,8 +258,8 @@ const toggleBucketTree = () => {
   
   // 如果树结构为空，尝试加载
   if (!bucketTree.value) {
-    bucketTree.value = cacheService.getBucketTree()
-    
+      bucketTree.value = cacheService.getBucketTree()
+      
     // 如果缓存中没有树结构，尝试加载一次
     if (!bucketTree.value && checkS3Config.value) {
       loadBucketTree()
@@ -628,4 +628,4 @@ watch(
   font-size: 12px;
   margin-top: 4px;
 }
-</style>
+</style> 
