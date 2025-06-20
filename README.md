@@ -31,6 +31,11 @@ FlareAlbum 是一个基于 Vue 3 和 Ant Design Vue 构建的图床管理工具�
 - **响应式设计** - 适配各种屏幕尺寸，支持列表/网格视图切换
 - **安全存储** - 存储桶配置本地加密存储，不泄露敏感信息
 
+|||
+|---|---|
+|![image](https://github.com/user-attachments/assets/1cbb9d39-83a5-47f7-96bd-c22c10558003)|![image](https://github.com/user-attachments/assets/8f152002-4abf-4513-9aec-07b09c12c9a2)|
+|![image](https://github.com/user-attachments/assets/24a504cf-d59a-4e0a-a92e-ddcf28eacaae)|![image](https://github.com/user-attachments/assets/50b2657a-a9e7-4479-92c1-8d312b94040f)|
+
 ## 快速开始
 
 ### 安装
