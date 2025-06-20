@@ -231,7 +231,9 @@ class S3Service {
       
       // 如果有自定义域名前缀，直接返回自定义 URL
       if (customDomain) {
-        return `${customDomain}/${key}`
+        // 确保 key 不以/开头，避免双斜杠
+        const cleanKey = key.replace(/^\/+/, '')
+        return `${customDomain}/${cleanKey}`
       }
       
       // 否则生成签名 URL

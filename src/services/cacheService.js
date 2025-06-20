@@ -365,8 +365,11 @@ class CacheService {
         files: []
       };
       
+      // 清空文件 URL 缓存
+      const fileUrlCache = this.loadFileUrls();
+      
       // 从根目录开始递归缓存
-      await this.cacheFolderRecursively('', s3Service);
+      await this.cacheFolderRecursively('', s3Service, fileUrlCache);
       
       // 更新树结构和所有文件列表
       this.saveBucketTree();
@@ -380,7 +383,7 @@ class CacheService {
   }
   
   // 递归缓存文件夹
-  async cacheFolderRecursively(path, s3Service, depth = 0, maxDepth = 10) {
+  async cacheFolderRecursively(path, s3Service, fileUrlCache = {}, depth = 0, maxDepth = 10) {
     // 防止过深递归
     if (depth > maxDepth) {
       console.warn(`达到最大递归深度 ${maxDepth}，路径：${path}`);
@@ -393,12 +396,55 @@ class CacheService {
     // 保存到缓存
     this.saveFileList(path, files);
     
+    // 预加载图片 URL
+    const imageFiles = files.filter(file => !file.isFolder && this.isImageFile(file.name));
+    
+    // 检查是否有自定义域名前缀
+    const userSettings = this.loadUserSettings();
+    const customDomain = userSettings?.customDomainPrefix?.trim().replace(/\/+$/, '');
+    
+    // 如果有自定义域名前缀，直接使用它构建 URL
+    if (customDomain) {
+      imageFiles.forEach(file => {
+        if (!fileUrlCache[file.key]) {
+          // 确保 key 不以/开头，避免双斜杠
+          const cleanKey = file.key.replace(/^\/+/, '');
+          fileUrlCache[file.key] = `${customDomain}/${cleanKey}`;
+        }
+      });
+    } else {
+      // 否则使用签名 URL
+      await Promise.all(
+        imageFiles.map(async (file) => {
+          try {
+            if (!fileUrlCache[file.key]) {
+              const url = await s3Service.getSignedUrl(file.key, 3600 * 24); // 24 小时有效期
+              fileUrlCache[file.key] = url;
+            }
+          } catch (error) {
+            console.error(`获取文件 ${file.key} 的 URL 失败:`, error);
+          }
+        })
+      );
+    }
+    
+    // 保存 URL 缓存
+    this.saveFileUrls(fileUrlCache);
+    
     // 递归处理子文件夹
     const folders = files.filter(file => file.isFolder);
     for (const folder of folders) {
       const folderPath = folder.key;
-      await this.cacheFolderRecursively(folderPath, s3Service, depth + 1, maxDepth);
+      await this.cacheFolderRecursively(folderPath, s3Service, fileUrlCache, depth + 1, maxDepth);
     }
+  }
+  
+  // 判断文件是否为图片
+  isImageFile(filename) {
+    if (!filename) return false;
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
+    const extension = filename.split('.').pop().toLowerCase();
+    return imageExtensions.includes(extension);
   }
 
   // 处理存储错误（通常是存储空间不足）

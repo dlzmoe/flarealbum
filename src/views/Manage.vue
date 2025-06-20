@@ -485,6 +485,16 @@ const loadFiles = async () => {
     
     // 获取缓存统计
     updateCacheStats()
+    
+    // 检查是否需要加载缺失的图片 URL
+    const imageFiles = fileList.value.filter(file => !file.isFolder && isImageFile(file.name))
+    const missingUrls = imageFiles.filter(file => !fileUrlCache.value[file.key])
+    
+    // 如果有缺失的 URL，尝试加载
+    if (missingUrls.length > 0) {
+      await loadThumbnails(fileList.value)
+    }
+    
     return
   }
   
@@ -574,7 +584,9 @@ const getFileUrl = (key) => {
   const userSettings = store.state.userSettings
   if (userSettings?.customDomainPrefix) {
     const domain = userSettings.customDomainPrefix.trim().replace(/\/+$/, '')
-    return `${domain}/${key}`
+    // 确保 key 不以/开头，避免双斜杠
+    const cleanKey = key.replace(/^\/+/, '')
+    return `${domain}/${cleanKey}`
   }
   
   // 没有自定义域名也没有缓存，返回 null
@@ -602,11 +614,8 @@ const refreshFiles = async () => {
     // 加载当前路径的文件
     fileList.value = cacheService.getFilesInPath(currentPath.value)
     
-    // 清空 URL 缓存，以便重新生成
-    fileUrlCache.value = {}
-    
-    // 预加载图片缩略图 URL
-    await loadThumbnails(fileList.value)
+    // 加载 URL 缓存，而不是清空它
+    fileUrlCache.value = cacheService.loadFileUrls()
     
     // 获取缓存统计
     updateCacheStats()
@@ -652,7 +661,9 @@ const copyUrl = async (key) => {
       
       if (customDomain) {
         // 使用自定义域名
-        url = `${customDomain}/${key}`
+        // 确保 key 不以/开头，避免双斜杠
+        const cleanKey = key.replace(/^\/+/, '')
+        url = `${customDomain}/${cleanKey}`
       } else {
         // 否则获取签名 URL
         url = await s3Service.getSignedUrl(key)
