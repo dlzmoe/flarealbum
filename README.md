@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>便捷、高效的 Cloudflare R2 图床管理工具</strong>
+  <strong>便捷、高效的 Cloudflare R2 图床管理工具。</strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,8 @@
   <a href="#使用指南">使用指南</a> •
   <a href="#环境要求">环境要求</a> •
   <a href="#技术栈">技术栈</a> •
-  <a href="#许可证">许可证</a>
+  <a href="#许可证">许可证</a> •
+  <a href="README_EN.md">English</a>
 </p>
 
 ## 简介
