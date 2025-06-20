@@ -34,8 +34,8 @@
             </template>
           </a-input>
           <div class="setting-tip">
-            设置后，生成的图片链接将使用此域名替代默认的R2存储URL。
-            <a-tag v-if="customDomainPrefix" color="success">示例: {{ getExampleUrl() }}</a-tag>
+            设置后，生成的图片链接将使用此域名替代默认的 R2 存储 URL。
+            <a-tag v-if="customDomainPrefix" color="success">示例：{{ getExampleUrl() }}</a-tag>
           </div>
         </a-form-item>
         
@@ -113,9 +113,9 @@ const copyFormat = ref('url')
 const defaultUploadPath = ref('')
 const defaultFileNameOption = ref('original')
 const autoCopy = ref(true)
-const customDomainPrefix = ref('')
+const customDomainPrefix = ref('') // 新增自定义域名前缀
 
-// 生成示例URL
+// 生成示例 URL
 const getExampleUrl = () => {
   const domain = customDomainPrefix.value.trim().replace(/\/+$/, '')
   const path = defaultUploadPath.value.trim().replace(/^\/+|\/+$/g, '')
@@ -134,6 +134,7 @@ const getExampleUrl = () => {
 
 // 保存设置
 const saveSettings = () => {
+  // 处理域名前缀，移除结尾的斜杠
   const domain = customDomainPrefix.value.trim().replace(/\/+$/, '')
   
   const settings = {
@@ -141,7 +142,7 @@ const saveSettings = () => {
     defaultUploadPath: defaultUploadPath.value,
     defaultFileNameOption: defaultFileNameOption.value,
     autoCopy: autoCopy.value,
-    customDomainPrefix: domain
+    customDomainPrefix: domain // 保存自定义域名前缀
   }
   
   // 使用 Vuex store action 保存设置
@@ -199,7 +200,7 @@ onMounted(() => {
     defaultUploadPath.value = storeSettings.defaultUploadPath || ''
     defaultFileNameOption.value = storeSettings.defaultFileNameOption || 'original'
     autoCopy.value = storeSettings.autoCopy !== undefined ? storeSettings.autoCopy : true
-    customDomainPrefix.value = storeSettings.customDomainPrefix || ''
+    customDomainPrefix.value = storeSettings.customDomainPrefix || '' // 加载自定义域名前缀
   } else {
     // 尝试从 cacheService 加载
     const cachedSettings = cacheService.loadUserSettings()
@@ -209,7 +210,7 @@ onMounted(() => {
       defaultUploadPath.value = cachedSettings.defaultUploadPath || ''
       defaultFileNameOption.value = cachedSettings.defaultFileNameOption || 'original'
       autoCopy.value = cachedSettings.autoCopy !== undefined ? cachedSettings.autoCopy : true
-      customDomainPrefix.value = cachedSettings.customDomainPrefix || ''
+      customDomainPrefix.value = cachedSettings.customDomainPrefix || '' // 加载自定义域名前缀
       
       // 同步到 Vuex
       store.commit('setUserSettings', cachedSettings)
@@ -224,7 +225,7 @@ onMounted(() => {
           defaultUploadPath.value = settings.defaultUploadPath || ''
           defaultFileNameOption.value = settings.defaultFileNameOption || 'original'
           autoCopy.value = settings.autoCopy !== undefined ? settings.autoCopy : true
-          customDomainPrefix.value = settings.customDomainPrefix || ''
+          customDomainPrefix.value = settings.customDomainPrefix || '' // 加载自定义域名前缀
           
           // 同步到 Vuex
           store.commit('setUserSettings', settings)
@@ -248,4 +249,4 @@ onMounted(() => {
   font-size: 12px;
   margin-top: 4px;
 }
-</style> 
+</style>

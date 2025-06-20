@@ -6,6 +6,7 @@ import {
   GetObjectCommand
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { useStore } from 'vuex'
 
 class S3Service {
   constructor(config) {
@@ -82,6 +83,24 @@ class S3Service {
     }
   }
 
+  // 获取用户设置中的自定义域名前缀
+  getCustomDomainPrefix() {
+    try {
+      // 尝试从 localStorage 获取用户设置
+      const settingsStr = localStorage.getItem('userSettings')
+      if (settingsStr) {
+        const settings = JSON.parse(settingsStr)
+        if (settings && settings.customDomainPrefix) {
+          return settings.customDomainPrefix.trim().replace(/\/+$/, '')
+        }
+      }
+      return null
+    } catch (e) {
+      console.error('获取自定义域名前缀失败', e)
+      return null
+    }
+  }
+
   async listObjects(prefix = '') {
     if (!this.client) {
       throw new Error('S3 客户端未初始化，请先配置存储')
@@ -153,8 +172,17 @@ class S3Service {
       
       const response = await this.client.send(command)
       
-      // 构建完整的文件 URL
-      const fileUrl = `${this.config.endpoint}/${this.config.bucket}/${key}`
+      // 构建文件 URL，优先使用自定义域名前缀
+      const customDomain = this.getCustomDomainPrefix()
+      let fileUrl
+      
+      if (customDomain) {
+        // 使用自定义域名
+        fileUrl = `${customDomain}/${key}`
+      } else {
+        // 使用默认 R2 URL
+        fileUrl = `${this.config.endpoint}/${this.config.bucket}/${key}`
+      }
       
       return {
         success: true,
@@ -198,6 +226,15 @@ class S3Service {
     }
     
     try {
+      // 检查是否有自定义域名前缀
+      const customDomain = this.getCustomDomainPrefix()
+      
+      // 如果有自定义域名前缀，直接返回自定义 URL
+      if (customDomain) {
+        return `${customDomain}/${key}`
+      }
+      
+      // 否则生成签名 URL
       const command = new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: key
@@ -209,7 +246,7 @@ class S3Service {
       
       return signedUrl
     } catch (error) {
-      console.error('获取签名 URL 失败：', error)
+      console.error('获取签名URL失败：', error)
       throw error
     }
   }

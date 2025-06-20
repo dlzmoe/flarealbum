@@ -49,19 +49,42 @@
             <clock-circle-outlined /> {{ cacheTimestamp ? new Date(cacheTimestamp).toLocaleString() : '无缓存' }}
           </a-tag>
           <a-button @click="toggleViewMode">
-            <unordered-list-outlined v-if="viewMode === 'grid'" />
-            <appstore-outlined v-else />
-            {{ viewMode === 'list' ? '切换到九宫格' : '切换到列表' }}
+            <template #icon>
+              <appstore-outlined v-if="viewMode === 'list'" />
+              <unordered-list-outlined v-else />
+            </template>
+            {{ viewMode === 'list' ? '网格视图' : '列表视图' }}
           </a-button>
           <a-button @click="toggleBucketTree">
-            <partition-outlined />浏览树结构
+            <template #icon>
+              <partition-outlined />
+            </template>
+            文件夹树
           </a-button>
           <a-button type="primary" @click="refreshFiles" :loading="loading">
-            <reload-outlined />刷新
+            <template #icon>
+              <reload-outlined />
+            </template>
+            刷新
           </a-button>
         </a-space>
       </template>
     </a-page-header>
+
+    <!-- 自定义域名提示 -->
+    <a-alert
+      v-if="customDomainPrefix"
+      type="info"
+      show-icon
+      style="margin-bottom: 16px"
+    >
+      <template #message>
+        当前使用自定义域名前缀：<a-tag color="blue">{{ customDomainPrefix }}</a-tag>
+      </template>
+      <template #description>
+        所有图片链接将使用此域名前缀，而不是默认的 R2 存储 URL。您可以在<router-link to="/settings">设置页面</router-link>中修改。
+      </template>
+    </a-alert>
 
     <a-card>
       <!-- 面包屑导航 -->
@@ -75,14 +98,14 @@
       </a-breadcrumb>
       
       <!-- 缓存指示器 -->
-      <a-alert 
+      <!-- <a-alert 
         v-if="cacheTimestamp && !loading" 
         type="info" 
         show-icon 
         message="使用缓存数据" 
         description="当前显示的是本地缓存数据，点击刷新按钮获取最新数据。"
         style="margin-bottom: 16px"
-      />
+      /> -->
       
       <!-- 警告提示 -->
       <a-alert 
@@ -518,6 +541,9 @@ const loadThumbnails = async (files) => {
       }
     })
   )
+  
+  // 保存 URL 缓存
+  cacheService.saveFileUrls(fileUrlCache.value)
 }
 
 // 获取文件缩略图 URL
@@ -690,6 +716,12 @@ const toggleViewMode = () => {
   // 保存用户偏好到本地存储
   localStorage.setItem('r2_image_hosting_view_mode', viewMode.value)
 }
+
+// 获取自定义域名前缀
+const customDomainPrefix = computed(() => {
+  const userSettings = store.state.userSettings
+  return userSettings?.customDomainPrefix || null
+})
 
 // 挂载时加载数据
 onMounted(() => {
