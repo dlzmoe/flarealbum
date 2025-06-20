@@ -279,6 +279,25 @@ const testConnection = async () => {
     await tempService.listObjects();
 
     message.success("连接成功！可以正常访问您的 R2 存储桶。");
+
+    // 连接成功后，执行一次缓存刷新操作
+    try {
+      message.loading("正在初始化缓存数据...", 0);
+      
+      // 先保存配置到 Vuex 和本地存储，确保 s3Service 已初始化
+      const config = { ...formState };
+      await store.dispatch("saveConfig", config);
+      
+      // 使用实际的 s3Service 实例刷新缓存
+      await cacheService.refreshBucketData(s3Service);
+      
+      message.destroy(); // 关闭加载提示
+      message.success("缓存数据初始化完成！");
+    } catch (cacheError) {
+      message.destroy(); // 关闭加载提示
+      console.error("初始化缓存失败：", cacheError);
+      message.warning("连接成功，但初始化缓存数据失败，您可以稍后在图床管理页面手动刷新。");
+    }
   } catch (error) {
     console.error("连接测试失败：", error);
 
