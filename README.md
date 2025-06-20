@@ -1,7 +1,7 @@
 # FlareAlbum
 
 <p align="center">
-  <img src="https://obsidian-images.zishu.me/2025/06/1750388445369.webp" alt="FlareAlbum Logo" width="200">
+  <img src="https://raw.githubusercontent.com/dlzmoe/flarealbum/refs/heads/main/public/logo.webp" alt="FlareAlbum Logo" width="200">
 </p>
 
 <p align="center">
