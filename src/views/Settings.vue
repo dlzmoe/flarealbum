@@ -2,7 +2,7 @@
   <div class="settings-container">
     <a-page-header
       title="我的设置"
-      sub-title="个性化您的使用体验"
+      sub-title="个性化您的FlareAlbum体验"
     />
     
     <a-card title="通用设置">
@@ -73,9 +73,9 @@
     
     <a-card title="关于" style="margin-top: 16px">
       <a-typography>
-        <a-typography-title :level="4">图床上传工具</a-typography-title>
+        <a-typography-title :level="4">FlareAlbum</a-typography-title>
         <a-typography-paragraph>
-          这是一个基于 Vue3 和 Ant Design Vue 构建的图床上传工具，支持上传图片到 Cloudflare R2 存储桶。
+          这是一个基于 Vue3 和 Ant Design Vue 构建的图床上传工具，专为 Cloudflare R2 存储设计。通过直观的界面，您可以轻松上传、管理和分享图片。
         </a-typography-paragraph>
         <a-typography-paragraph>
           <ul>
@@ -83,6 +83,7 @@
             <li>支持管理 R2 存储中的文件</li>
             <li>支持文件夹管理</li>
             <li>支持预览和分享图片</li>
+            <li>支持自定义域名前缀</li>
           </ul>
         </a-typography-paragraph>
         <a-typography-paragraph>

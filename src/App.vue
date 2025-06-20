@@ -12,6 +12,7 @@ const router = useRouter()
 const route = useRoute()
 const selectedKeys = ref([route.path.substring(1) || 'upload'])
 const contentRef = ref(null)
+const collapsed = ref(false)
 
 // 路由导航函数
 const navigateTo = (path) => {
@@ -33,6 +34,11 @@ watch(() => route.path, (newPath) => {
   }
 })
 
+// 处理侧边栏收缩状态变化
+const onCollapse = (value) => {
+  collapsed.value = value
+}
+
 // 初始化时设置当前路径对应的菜单项
 onMounted(() => {
   selectedKeys.value = [route.path.substring(1) || 'upload']
@@ -47,8 +53,13 @@ onMounted(() => {
       collapsible
       width="200"
       style="overflow: auto; height: 100vh; position: fixed; left: 0"
+      v-model:collapsed="collapsed"
+      @collapse="onCollapse"
     >
-      <div class="logo">FlareAlbum</div>
+      <div class="logo" :class="{ 'logo-collapsed': collapsed }">
+        <span v-if="!collapsed">FlareAlbum</span>
+        <span v-else>FA</span>
+      </div>
       <a-menu
         v-model:selectedKeys="selectedKeys"
         mode="inline"
@@ -73,7 +84,7 @@ onMounted(() => {
       </a-menu>
     </a-layout-sider>
     
-    <a-layout style="margin-left: 200px">
+    <a-layout :style="{ marginLeft: collapsed ? '80px' : '200px', transition: 'all 0.2s' }">
       <!-- 主要内容区域 -->
       <a-layout-content 
         ref="contentRef"
@@ -101,5 +112,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
+}
+
+.logo-collapsed {
+  font-size: 14px;
 }
 </style>

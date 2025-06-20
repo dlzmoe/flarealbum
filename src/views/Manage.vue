@@ -40,7 +40,7 @@
     
     <a-page-header
       title="图床管理"
-      sub-title="管理您的R2存储内容"
+      sub-title="管理您的FlareAlbum图片"
       :backIcon="false"
     >
       <template #extra>
@@ -113,7 +113,7 @@
         type="warning" 
         show-icon 
         message="请先完成S3配置" 
-        description="您需要先在S3配置页面中完成R2存储设置后才能管理文件。"
+        description="您需要先在S3配置页面中完成Cloudflare R2存储设置后才能管理文件。"
         style="margin-bottom: 16px"
       />
       

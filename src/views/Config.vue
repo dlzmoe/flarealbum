@@ -1,4 +1,19 @@
 <template>
+  <a-page-header
+    title="S3 配置"
+    sub-title="配置您的Cloudflare R2存储"
+    :backIcon="false"
+  />
+  
+  <a-alert
+    v-if="configSaved"
+    message="配置已保存"
+    description="您的FlareAlbum已成功连接到Cloudflare R2存储，现在可以开始上传和管理图片了。"
+    type="success"
+    show-icon
+    style="margin-bottom: 16px"
+  />
+  
   <div class="config-container">
     <a-card title="S3/R2存储配置" class="config-card">
       <a-form
@@ -160,6 +175,7 @@ const formRef = ref()
 const loading = ref(false)
 const testing = ref(false)
 const corsError = ref(false)
+const configSaved = ref(false)
 
 // 表单状态
 const formState = reactive({
@@ -210,6 +226,7 @@ const onFinish = async () => {
     await store.dispatch('saveConfig', config)
     
     message.success('配置已保存')
+    configSaved.value = true
     // 重置 CORS 错误标志
     corsError.value = false
   } catch (error) {
