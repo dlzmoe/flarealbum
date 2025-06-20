@@ -45,16 +45,16 @@
         description="您需要先在S3配置页面中完成Cloudflare R2存储设置后才能上传文件。"
         style="margin-bottom: 16px"
       />
-            
+      
       <!-- WebP 转换提示 -->
-      <a-alert 
+            <a-alert 
         v-if="isWebpEnabled" 
         type="info" 
-        show-icon 
+              show-icon 
         message="WebP 转换已启用" 
         :description="`上传的图片将自动转换为 WebP 格式，可以大幅减小文件体积并提高加载速度。质量设置: ${webpQuality}%`"
-        style="margin-bottom: 16px"
-      />
+              style="margin-bottom: 16px"
+            />
             
       <!-- 上传表单 -->
       <div class="upload-form">
@@ -91,8 +91,8 @@
             />
             <div class="filename-preview" v-if="selectedFiles.length > 0">
               示例：{{ generateFilename(selectedFiles[0]) }}
+                </div>
             </div>
-          </div>
         </a-form-item>
 
         <!-- 文件上传区域 -->
@@ -125,12 +125,12 @@
               :loading="uploading"
             >
               <upload-outlined /> {{ uploading ? '上传中...' : '开始上传' }}
-            </a-button>
+                  </a-button>
             <a-button @click="clearFiles" :disabled="selectedFiles.length === 0 || uploading">
               清空列表
             </a-button>
-          </a-space>
-        </div>
+            </a-space>
+              </div>
               </div>
 
       <!-- 上传进度 -->
@@ -163,7 +163,7 @@
                   <div class="result-icon">
                     <check-circle-outlined v-if="item.success" class="success-icon" />
                     <close-circle-outlined v-else class="error-icon" />
-                  </div>
+              </div>
               </template>
                 <template #title>
                   <div class="result-title">
@@ -171,7 +171,7 @@
                     <a-tag v-if="item.success" color="success">上传成功</a-tag>
                     <a-tag v-if="item.success && item.isWebp" color="processing">WebP</a-tag>
                     <a-tag v-else-if="!item.success" color="error">上传失败</a-tag>
-                  </div>
+            </div>
               </template>
                 <template #description>
                   <div v-if="item.success">
