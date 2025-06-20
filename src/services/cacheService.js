@@ -2,10 +2,12 @@
 class CacheService {
   constructor() {
     this.CACHE_PREFIX = 'r2_image_hosting_';
-    this.CACHE_EXPIRY = 60 * 60 * 1000; // 默认 1 小时 (毫秒)
+    this.CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 延长缓存有效期为 24 小时 (毫秒)
     this.IMAGE_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 图片 URL 缓存 24 小时
     this.bucketTree = null; // 存储桶树形结构
+    this.allFiles = null; // 存储所有文件的缓存
     this.loadBucketTree(); // 初始化时加载树结构
+    this.loadAllFiles(); // 初始化时加载所有文件
   }
 
   // 获取文件列表缓存键
@@ -258,8 +260,8 @@ class CacheService {
   // 保存所有文件的平面列表
   saveAllFiles() {
     try {
-      const allFiles = this.getAllFilesFromTree(this.bucketTree);
-      localStorage.setItem(this.getAllFilesKey(), JSON.stringify(allFiles));
+      this.allFiles = this.getAllFilesFromTree(this.bucketTree);
+      localStorage.setItem(this.getAllFilesKey(), JSON.stringify(this.allFiles));
     } catch (error) {
       console.error('保存所有文件列表失败:', error);
       this.handleStorageError();
@@ -287,40 +289,93 @@ class CacheService {
   loadAllFiles() {
     try {
       const cached = localStorage.getItem(this.getAllFilesKey());
-      return cached ? JSON.parse(cached) : [];
+      this.allFiles = cached ? JSON.parse(cached) : [];
+      return this.allFiles;
     } catch (error) {
       console.error('加载所有文件列表失败：', error);
+      this.allFiles = [];
       return [];
     }
   }
 
-  // 清除指定路径的缓存
-  clearPathCache(path) {
-    try {
-      localStorage.removeItem(this.getFileListCacheKey(path));
-    } catch (error) {
-      console.error(`清除路径 ${path} 的缓存失败:`, error);
+  // 获取指定路径下的文件（从缓存中）
+  getFilesInPath(path) {
+    // 先尝试从专门的路径缓存中获取
+    const cachedFiles = this.loadFileList(path);
+    if (cachedFiles) {
+      return cachedFiles;
     }
-  }
-
-  // 清除所有缓存
-  clearAllCache() {
-    try {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith(this.CACHE_PREFIX)) {
-          localStorage.removeItem(key);
-        }
+    
+    // 如果没有专门的路径缓存，从树结构中获取
+    const node = this.getNodeByPath(path);
+    if (node) {
+      // 获取当前节点的文件
+      const files = [...node.files];
+      
+      // 添加子文件夹
+      node.children.forEach(child => {
+        files.push({
+          key: child.path + '/',
+          name: child.name + '/',
+          isFolder: true,
+          size: 0,
+          lastModified: null
+        });
       });
       
-      // 重置内存中的树结构
+      return files;
+    }
+    
+    return [];
+  }
+
+  // 初始化或刷新整个存储桶数据
+  async refreshBucketData(s3Service) {
+    try {
+      // 清除当前的缓存时间戳，标记为刷新模式
+      localStorage.setItem(this.getTimestampKey(), Date.now().toString());
+      
+      // 重置树结构
       this.bucketTree = {
         name: 'root',
         path: '',
         children: [],
         files: []
       };
+      
+      // 从根目录开始递归缓存
+      await this.cacheFolderRecursively('', s3Service);
+      
+      // 更新树结构和所有文件列表
+      this.saveBucketTree();
+      this.saveAllFiles();
+      
+      return true;
     } catch (error) {
-      console.error('清除所有缓存失败：', error);
+      console.error('刷新存储桶数据失败：', error);
+      return false;
+    }
+  }
+  
+  // 递归缓存文件夹
+  async cacheFolderRecursively(path, s3Service, depth = 0, maxDepth = 10) {
+    // 防止过深递归
+    if (depth > maxDepth) {
+      console.warn(`达到最大递归深度 ${maxDepth}，路径：${path}`);
+      return;
+    }
+    
+    // 获取当前路径的文件列表
+    const files = await s3Service.listObjects(path);
+    
+    // 保存到缓存
+    this.saveFileList(path, files);
+    
+    // 递归处理子文件夹
+    const folders = files.filter(file => file.isFolder);
+    for (const folder of folders) {
+      const folderPath = folder.key;
+      await this.cacheFolderRecursively(folderPath, s3Service, depth + 1, maxDepth);
     }
   }
 
@@ -425,6 +480,27 @@ class CacheService {
     } catch (error) {
       console.error('加载用户设置失败：', error);
       return null;
+    }
+  }
+
+  // 清除所有缓存
+  clearAllCache() {
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(this.CACHE_PREFIX)) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // 重置内存中的树结构
+      this.bucketTree = {
+        name: 'root',
+        path: '',
+        children: [],
+        files: []
+      };
+    } catch (error) {
+      console.error('清除所有缓存失败：', error);
     }
   }
 }

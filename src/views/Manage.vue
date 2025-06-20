@@ -34,9 +34,6 @@
             <strong>缓存图片数：</strong> {{ cacheStats?.urlCount || 0 }}<br>
             <strong>树结构大小：</strong> {{ cacheStats?.bucketTreeSize || '0 B' }}
           </p>
-          <a-button type="primary" @click="cacheEntireBucket" :disabled="loading">
-            缓存整个存储桶
-          </a-button>
         </div>
       </div>
     </a-drawer>
@@ -48,7 +45,7 @@
     >
       <template #extra>
         <a-space>
-          <a-tag v-if="!forceRefresh && !loading" color="success">
+          <a-tag v-if="!loading" color="success">
             <clock-circle-outlined /> {{ cacheTimestamp ? new Date(cacheTimestamp).toLocaleString() : '无缓存' }}
           </a-tag>
           <a-button @click="toggleViewMode">
@@ -62,21 +59,6 @@
           <a-button type="primary" @click="refreshFiles" :loading="loading">
             <reload-outlined />刷新
           </a-button>
-          <a-dropdown>
-            <a-button>
-              <more-outlined />
-            </a-button>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="cacheEntireBucket">
-                  <database-outlined /> 缓存整个存储桶
-                </a-menu-item>
-                <a-menu-item @click="clearAllCache">
-                  <delete-outlined /> 清除缓存
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
         </a-space>
       </template>
     </a-page-header>
@@ -94,11 +76,11 @@
       
       <!-- 缓存指示器 -->
       <a-alert 
-        v-if="!forceRefresh && cacheTimestamp && !loading" 
+        v-if="cacheTimestamp && !loading" 
         type="info" 
         show-icon 
         message="使用缓存数据" 
-        description="当前显示的是本地缓存数据，点击刷新按钮获取最新数据。可以使用'缓存整个存储桶'功能预先缓存所有内容。"
+        description="当前显示的是本地缓存数据，点击刷新按钮获取最新数据。"
         style="margin-bottom: 16px"
       />
       
@@ -316,8 +298,6 @@ import {
   FileImageOutlined,
   ClockCircleOutlined,
   MoreOutlined,
-  DeleteOutlined,
-  DatabaseOutlined,
   PartitionOutlined,
   AppstoreOutlined,
   UnorderedListOutlined
@@ -338,7 +318,6 @@ const previewUrl = ref('')
 const previewImage = ref(null)
 const fileUrlCache = ref({}) // 缓存文件 URL
 const cacheTimestamp = ref(0) // 缓存时间戳
-const forceRefresh = ref(false) // 强制刷新标志
 const showBucketTree = ref(false) // 是否显示存储桶树结构
 const bucketTree = ref(null) // 存储桶树结构
 const cacheStats = ref(null) // 缓存统计
@@ -464,36 +443,28 @@ const loadFiles = async () => {
   // 获取缓存时间戳
   cacheTimestamp.value = parseInt(localStorage.getItem(cacheService.getTimestampKey()) || '0', 10)
   
-  // 检查缓存
-  if (!forceRefresh.value) {
-    // 尝试从缓存获取文件列表
-    const cachedFiles = cacheService.loadFileList(currentPath.value)
-    if (cachedFiles && !cacheService.isCacheExpired()) {
-      fileList.value = cachedFiles
-      
-      // 加载 URL 缓存
-      fileUrlCache.value = cacheService.loadFileUrls()
-      
-      // 加载树结构
-      bucketTree.value = cacheService.getBucketTree()
-      
-      // 获取缓存统计
-      updateCacheStats()
-      return
-    }
+  // 从缓存中获取文件列表
+  const cachedFiles = cacheService.getFilesInPath(currentPath.value)
+  if (cachedFiles && cachedFiles.length > 0) {
+    fileList.value = cachedFiles
+    
+    // 加载 URL 缓存
+    fileUrlCache.value = cacheService.loadFileUrls()
+    
+    // 加载树结构
+    bucketTree.value = cacheService.getBucketTree()
+    
+    // 获取缓存统计
+    updateCacheStats()
+    return
   }
   
+  // 如果没有缓存或缓存为空，尝试加载
   loading.value = true
   
   try {
-    // 设置防止重复加载的标志
-    const currentLoadPath = currentPath.value
-    
     // 获取文件列表
     const files = await s3Service.listObjects(currentPath.value)
-    
-    // 防止多次快速点击导致的路径不匹配问题
-    if (currentLoadPath !== currentPath.value) return
     
     fileList.value = files
     
@@ -511,9 +482,6 @@ const loadFiles = async () => {
     
     // 获取缓存统计
     updateCacheStats()
-    
-    // 重置强制刷新标志
-    forceRefresh.value = false
   } catch (error) {
     console.error('加载文件失败：', error)
     message.error(`加载失败：${error.message}`)
@@ -556,9 +524,39 @@ const getFileUrl = (key) => {
 }
 
 // 刷新文件列表 (强制刷新)
-const refreshFiles = () => {
-  forceRefresh.value = true
-  loadFiles()
+const refreshFiles = async () => {
+  if (!checkS3Config.value) {
+    message.warning('请先完成 S3 配置')
+    return
+  }
+  
+  loading.value = true
+  message.info('正在刷新存储桶数据，这可能需要一些时间...')
+  
+  try {
+    // 刷新整个存储桶数据
+    await cacheService.refreshBucketData(s3Service)
+    
+    // 更新状态
+    bucketTree.value = cacheService.getBucketTree()
+    cacheTimestamp.value = Date.now()
+    
+    // 加载当前路径的文件
+    fileList.value = cacheService.getFilesInPath(currentPath.value)
+    
+    // 加载 URL 缓存
+    fileUrlCache.value = cacheService.loadFileUrls()
+    
+    // 获取缓存统计
+    updateCacheStats()
+    
+    message.success('存储桶数据刷新完成！')
+  } catch (error) {
+    console.error('刷新数据失败：', error)
+    message.error(`刷新失败：${error.message}`)
+  } finally {
+    loading.value = false
+  }
 }
 
 // 打开预览
@@ -661,84 +659,6 @@ const deleteFile = async (key) => {
   }
 }
 
-// 清除所有缓存
-const clearAllCache = () => {
-  cacheService.clearAllCache()
-  fileUrlCache.value = {}
-  bucketTree.value = cacheService.getBucketTree()
-  cacheTimestamp.value = 0
-  message.success('缓存已清除')
-  updateCacheStats()
-}
-
-// 缓存整个存储桶
-const cacheEntireBucket = async () => {
-  if (!checkS3Config.value) {
-    message.warning('请先完成 S3 配置')
-    return
-  }
-  
-  loading.value = true
-  message.info('开始缓存整个存储桶，这可能需要一些时间...')
-  
-  try {
-    // 从根目录开始递归缓存
-    await cacheFolderRecursively('')
-    
-    // 更新状态
-    bucketTree.value = cacheService.getBucketTree()
-    cacheTimestamp.value = Date.now()
-    updateCacheStats()
-    
-    message.success('存储桶缓存完成！')
-  } catch (error) {
-    console.error('缓存存储桶失败：', error)
-    message.error(`缓存失败：${error.message}`)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 递归缓存文件夹
-const cacheFolderRecursively = async (path, depth = 0, maxDepth = 10) => {
-  // 防止过深递归
-  if (depth > maxDepth) {
-    console.warn(`达到最大递归深度 ${maxDepth}，路径：${path}`)
-    return
-  }
-  
-  // 获取当前路径的文件列表
-  const files = await s3Service.listObjects(path)
-  
-  // 保存到缓存
-  cacheService.saveFileList(path, files)
-  
-  // 预加载图片 URL
-  const imageFiles = files.filter(file => !file.isFolder && isImageFile(file.name))
-  await Promise.all(
-    imageFiles.map(async (file) => {
-      try {
-        if (!fileUrlCache.value[file.key]) {
-          const url = await s3Service.getSignedUrl(file.key, 3600 * 24)
-          fileUrlCache.value[file.key] = url
-        }
-      } catch (error) {
-        console.error(`获取文件 ${file.key} 的 URL 失败:`, error)
-      }
-    })
-  )
-  
-  // 保存 URL 缓存
-  cacheService.saveFileUrls(fileUrlCache.value)
-  
-  // 递归处理子文件夹
-  const folders = files.filter(file => file.isFolder)
-  for (const folder of folders) {
-    const folderPath = folder.key
-    await cacheFolderRecursively(folderPath, depth + 1, maxDepth)
-  }
-}
-
 // 切换显示树结构
 const toggleBucketTree = () => {
   showBucketTree.value = !showBucketTree.value
@@ -819,9 +739,6 @@ onMounted(() => {
     }
   }
 
-  // 检查是否有缓存的文件列表
-  const cachedFiles = cacheService.loadFileList(currentPath.value)
-  
   // 检查是否有 S3 配置
   if (!checkS3Config.value) {
     // 尝试从缓存加载配置
@@ -829,26 +746,17 @@ onMounted(() => {
     if (cachedConfig) {
       // 更新到 Vuex
       store.dispatch('saveConfig', cachedConfig).then(() => {
-        // 配置加载成功后再检查文件列表缓存
-        if (cachedFiles && !cacheService.isCacheExpired()) {
-          fileList.value = cachedFiles
-          updateCacheStats()
-        } else {
-          // 无缓存或缓存过期，重新加载
-          loadFiles()
-        }
+        // 配置加载成功后加载文件列表
+        loadFiles()
       });
     }
   } else {
-    // 有配置则检查是否有缓存
-    if (cachedFiles && !cacheService.isCacheExpired()) {
-      fileList.value = cachedFiles
-      updateCacheStats()
-    } else {
-      // 无缓存或缓存过期，重新加载
-      loadFiles()
-    }
+    // 有配置则直接加载文件列表
+    loadFiles()
   }
+  
+  // 获取缓存统计
+  updateCacheStats()
 })
 
 // 监听 S3 配置变化，如果配置了就加载文件

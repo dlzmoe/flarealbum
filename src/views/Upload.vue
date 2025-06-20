@@ -246,7 +246,8 @@ const getChildCount = (node) => {
 // 选择上传路径
 const selectUploadPath = (path) => {
   if (path) {
-    uploadPath.value = path
+    // 标准化路径格式，移除结尾的斜杠
+    uploadPath.value = path.replace(/\/+$/, '')
     showBucketTree.value = false
   }
 }
@@ -269,9 +270,15 @@ const toggleBucketTree = () => {
 // 加载存储桶树结构
 const loadBucketTree = async () => {
   try {
-    // 从根目录开始加载
-    await s3Service.listObjects('')
+    // 先尝试从缓存获取
     bucketTree.value = cacheService.getBucketTree()
+    
+    // 如果缓存中没有树结构或树结构为空，尝试刷新一次
+    if (!bucketTree.value || (!bucketTree.value.children?.length && !bucketTree.value.files?.length)) {
+      // 刷新整个存储桶数据
+      await cacheService.refreshBucketData(s3Service)
+      bucketTree.value = cacheService.getBucketTree()
+    }
   } catch (error) {
     console.error('加载存储桶树结构失败：', error)
   }
@@ -346,11 +353,16 @@ const generateFilename = (file) => {
 
 // 构建上传路径
 const buildUploadPath = (filename) => {
-  let path = uploadPath.value
+  let path = uploadPath.value.trim()
   
-  // 确保路径以斜杠结尾
-  if (path && !path.endsWith('/')) {
-    path += '/'
+  // 处理路径格式，避免出现双斜杠
+  if (path) {
+    // 移除开头和结尾的斜杠
+    path = path.replace(/^\/+|\/+$/g, '')
+    // 如果路径不为空，添加一个斜杠
+    if (path) {
+      path = path + '/'
+    }
   }
   
   return path + filename
@@ -483,8 +495,14 @@ const navigateToManage = () => {
 
 // 挂载时加载数据
 onMounted(() => {
+  // 尝试从本地存储恢复上传路径
+  const savedUploadPath = localStorage.getItem('r2_image_hosting_upload_path')
+  if (savedUploadPath) {
+    uploadPath.value = savedUploadPath
+  }
+  
   // 加载树结构
-  bucketTree.value = cacheService.getBucketTree()
+  loadBucketTree()
   
   // 检查是否有 S3 配置
   if (!checkS3Config.value) {
@@ -504,6 +522,14 @@ watch(
     if (newConfig && !bucketTree.value) {
       loadBucketTree()
     }
+  }
+)
+
+// 监听上传路径变化，保存到本地存储
+watch(
+  uploadPath,
+  (newPath) => {
+    localStorage.setItem('r2_image_hosting_upload_path', newPath)
   }
 )
 </script>
