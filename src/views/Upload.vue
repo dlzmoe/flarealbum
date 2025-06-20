@@ -37,15 +37,15 @@
 
     <a-card>
       <!-- 警告提示 -->
-      <a-alert 
-        v-if="!checkS3Config" 
-        type="warning" 
-        show-icon 
-        message="请先完成S3配置" 
+            <a-alert 
+              v-if="!checkS3Config" 
+              type="warning" 
+              show-icon 
+              message="请先完成S3配置" 
         description="您需要先在S3配置页面中完成Cloudflare R2存储设置后才能上传文件。"
-        style="margin-bottom: 16px"
-      />
-      
+              style="margin-bottom: 16px"
+            />
+            
       <!-- 上传表单 -->
       <div class="upload-form">
         <!-- 上传路径 -->

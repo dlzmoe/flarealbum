@@ -140,7 +140,7 @@
               </template>
               <template v-else-if="isImageFile(record.name) && getFileUrl(record.key)">
                 <div class="image-thumbnail" @click="openPreview(record)">
-                  <img :src="getFileUrl(record.key)" :alt="record.name" />
+                  <img :src="getFileUrl(record.key)" :alt="record.name" @error="handleImageError" />
                 </div>
               </template>
               <template v-else>
@@ -230,7 +230,7 @@
             >
               <div class="grid-card-content">
                 <div class="grid-image-container">
-                  <img v-if="getFileUrl(item.key)" :src="getFileUrl(item.key)" :alt="item.name" />
+                  <img v-if="getFileUrl(item.key)" :src="getFileUrl(item.key)" :alt="item.name" @error="handleImageError" />
                   <file-image-outlined v-else class="grid-image-icon" />
                 </div>
                 <div class="grid-file-name">{{ item.name }}</div>
@@ -303,13 +303,14 @@
         :src="previewUrl" 
         style="width: 100%;" 
         :alt="previewImage?.name || '预览图片'" 
+        @error="handleImageError"
       />
     </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, h } from 'vue'
 import { useStore } from 'vuex'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
@@ -345,6 +346,9 @@ const showBucketTree = ref(false) // 是否显示存储桶树结构
 const bucketTree = ref(null) // 存储桶树结构
 const cacheStats = ref(null) // 缓存统计
 const viewMode = ref('grid') // 修改默认为 'grid'，即九宫格模式
+
+// 添加默认占位图
+const placeholderImage = ref("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23f0f0f0'/%3E%3Cpath d='M100 80 L130 120 L100 160 L70 120 Z' fill='%23d9d9d9'/%3E%3Ccircle cx='100' cy='70' r='20' fill='%23d9d9d9'/%3E%3Ctext x='100' y='180' text-anchor='middle' fill='%23999' font-family='Arial' font-size='14'%3EFlareAlbum%3C/text%3E%3C/svg%3E")
 
 // 判断文件是否为图片
 const isImageFile = (filename) => {
@@ -620,11 +624,14 @@ const refreshFiles = async () => {
 const openPreview = (file) => {
   previewImage.value = file
   previewUrl.value = getFileUrl(file.key)
-  if (previewUrl.value) {
-    previewVisible.value = true
-  } else {
-    message.warning('无法加载预览图')
+  
+  // 始终显示预览，即使 URL 为空也使用占位图
+  if (!previewUrl.value) {
+    previewUrl.value = placeholderImage.value
+    message.warning('无法加载原图，显示占位图')
   }
+  
+  previewVisible.value = true
 }
 
 // 关闭预览
@@ -764,6 +771,12 @@ const customDomainPrefix = computed(() => {
   return userSettings?.customDomainPrefix || null
 })
 
+// 处理图片加载错误
+const handleImageError = (event) => {
+  event.target.src = placeholderImage.value
+  event.target.classList.add('placeholder-image')
+}
+
 // 挂载时加载数据
 onMounted(() => {
   // 初始化缓存统计
@@ -883,6 +896,13 @@ watch(
   object-fit: contain;
 }
 
+/* 占位图样式 */
+.placeholder-image {
+  opacity: 0.8;
+  background-color: #f5f5f5;
+  border: 1px dashed #d9d9d9;
+}
+
 .folder-icon {
   font-size: 24px;
   color: #faad14;
@@ -974,6 +994,12 @@ watch(
   object-fit: contain;
 }
 
+/* 网格视图中的占位图 */
+.grid-image-container .placeholder-image {
+  max-width: 80%;
+  max-height: 80%;
+}
+
 .grid-file-name {
   font-size: 14px;
   text-align: center;
@@ -998,7 +1024,6 @@ watch(
 .image-card {
   cursor: pointer;
 }
-
 
 .empty-container {
   padding: 40px 0;
