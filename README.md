@@ -1,7 +1,7 @@
 # FlareAlbum
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dlzmoe/flarealbum/refs/heads/main/public/logo.webp" alt="FlareAlbum Logo" width="200">
+  <img src="https://raw.githubusercontent.com/ezyshu/flarealbum/refs/heads/main/public/logo.webp" alt="FlareAlbum Logo" width="200">
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ FlareAlbum 是一个基于 Vue 3 和 Ant Design Vue 构建的图床管理工具�
 
 ```bash
 # 克隆项目
-git clone https://github.com/dlzmoe/flarealbum.git
+git clone https://github.com/ezyshu/flarealbum.git
 
 # 进入项目目录
 cd flarealbum
@@ -124,5 +124,5 @@ npm run build
 ---
 
 <p align="center">
-  由 <a href="https://github.com/dlzmoe">dlzmoe</a> 开发维护
+  由 <a href="https://github.com/ezyshu">ezyshu</a> 开发维护
 </p>

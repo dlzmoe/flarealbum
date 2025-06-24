@@ -31,7 +31,7 @@ R2 图片托管是一个基于 Vue 3 + Ant Design Vue 的现代化图片管理�
 
 1. **克隆项目**
    ```bash
-   git clone https://github.com/dlzmoe/flarealbum.git
+   git clone https://github.com/ezyshu/flarealbum.git
    cd flarealbum
    ```
 

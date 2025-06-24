@@ -96,7 +96,7 @@ onMounted(() => {
       </a-layout-content>
       
       <a-layout-footer style="text-align: center">
-        FlareAlbum ©2025 By <a href="https://github.com/dlzmoe/flarealbum" target="_blank">dlzmoe</a>
+        FlareAlbum ©2025 By <a href="https://github.com/ezyshu/flarealbum" target="_blank">ezyshu</a>
       </a-layout-footer>
     </a-layout>
   </a-layout>

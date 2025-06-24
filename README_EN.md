@@ -1,7 +1,7 @@
 # FlareAlbum
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dlzmoe/flarealbum/refs/heads/main/public/logo.webp" alt="FlareAlbum Logo" width="200">
+  <img src="https://raw.githubusercontent.com/ezyshu/flarealbum/refs/heads/main/public/logo.webp" alt="FlareAlbum Logo" width="200">
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ FlareAlbum is an image hosting management tool built with Vue 3 and Ant Design V
 
 ```bash
 # Clone the repository
-git clone https://github.com/dlzmoe/flarealbum.git
+git clone https://github.com/ezyshu/flarealbum.git
 
 # Navigate to project directory
 cd flarealbum
@@ -124,5 +124,5 @@ We welcome contributions, bug reports, and feature suggestions! Please check the
 ---
 
 <p align="center">
-  Developed and maintained by <a href="https://github.com/dlzmoe">dlzmoe</a>
+  Developed and maintained by <a href="https://github.com/ezyshu">ezyshu</a>
 </p> 
